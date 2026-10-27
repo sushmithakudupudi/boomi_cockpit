@@ -64,6 +64,8 @@ export interface CompanionMessage {
     language: string;
     code: string;
   };
+  // AI Docs summary of one process revision, with Word/PDF downloads
+  processDoc?: ProcessDocRef;
 }
 
 export interface AtomHealth {
@@ -75,4 +77,11 @@ export interface AtomHealth {
   heapUsagePercent: number;
   activeExecutions: number;
   queuedExecutions: number;
+}
+
+export interface ProcessDocRef {
+  source: 'live' | 'sample';
+  componentId: string;
+  version: number;
+  processName: string;
 }

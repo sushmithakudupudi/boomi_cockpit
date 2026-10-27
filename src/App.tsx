@@ -13,7 +13,7 @@ import { FailureHistory } from './components/FailureHistory';
 import { FailureAlertsToggle } from './components/FailureAlertsToggle';
 import { VisualArchitectureCompiler } from './components/VisualArchitectureCompiler';
 import { api } from './services/api';
-import type { ExecutionRecord, AtomHealth } from './types/boomi';
+import type { ExecutionRecord, AtomHealth, ProcessDocRef } from './types/boomi';
 import { 
   Sparkles, 
   RotateCcw, 
@@ -55,6 +55,8 @@ export function App() {
   const [rerunTarget, setRerunTarget] = useState<ExecutionRecord | null>(null);
   const [rerunBusy, setRerunBusy] = useState(false);
   const [companionPrompt, setCompanionPrompt] = useState<string | null>(null);
+  // Revision picked via "AI Docs" in Revision History; the Companion summarizes it
+  const [docRequest, setDocRequest] = useState<(ProcessDocRef & { requestId: number }) | null>(null);
   const [isReprocessed, setIsReprocessed] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isBackendConnected, setIsBackendConnected] = useState(false);
@@ -345,7 +347,8 @@ export function App() {
         onCloseMobile={() => setIsMobileNavOpen(false)}
       />
 
-      <div className="flex-1 min-w-0 flex flex-col">
+      {/* On wide screens the Companion drawer docks beside the page instead of covering it */}
+      <div className={`flex-1 min-w-0 flex flex-col transition-[margin] duration-200 ${isCompanionOpen ? 'lg:mr-[28rem]' : ''}`}>
       
       {/* Toast Notification */}
       {toastMessage && (
@@ -420,7 +423,12 @@ export function App() {
             <p className="text-xs text-slate-400 mt-1">This section is coming soon.</p>
           </div>
         ) : activeModule === 'revisions' ? (
-          <RevisionHistoryPage />
+          <RevisionHistoryPage
+            onAiDocs={(source, component, rev) => {
+              setDocRequest({ source, componentId: component.componentId, version: rev.version, processName: component.name, requestId: Date.now() });
+              setIsCompanionOpen(true);
+            }}
+          />
         ) : activeTab === 'cockpit' ? (
           <>
             {/* Banner Alert for real active error from Boomi platform */}
@@ -650,6 +658,7 @@ export function App() {
         pendingPrompt={companionPrompt}
         onPromptConsumed={() => setCompanionPrompt(null)}
         executions={executions}
+        docRequest={docRequest}
         onTriggerAutoHeal={handleAutoHeal}
         onOpenFlow={(exec) => {
           setSelectedExecution(exec);
