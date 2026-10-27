@@ -121,9 +121,9 @@ export const ExecutionTable: React.FC<ExecutionTableProps> = ({
       </div>
 
       {/* Table Body */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-xs">
-          <thead className="bg-slate-900/70 text-slate-400 font-semibold uppercase tracking-wider text-[10px] border-b border-boomi-cardBorder">
+      <div className="lg:overflow-x-auto">
+        <table className="block lg:table w-full text-left text-xs">
+          <thead className="hidden lg:table-header-group bg-slate-900/70 text-slate-400 font-semibold uppercase tracking-wider text-[10px] border-b border-boomi-cardBorder">
             <tr>
               <th className="py-3.5 px-4">Process Name & ID</th>
               <th className="py-3.5 px-4">Status</th>
@@ -134,24 +134,24 @@ export const ExecutionTable: React.FC<ExecutionTableProps> = ({
               <th className="py-3.5 px-4 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800/60">
+          <tbody className="block lg:table-row-group divide-y divide-slate-800/60">
             {filteredExecutions.map((exec) => {
               const isError = exec.status === 'ERROR' && !exec.reprocessed;
 
               return (
                 <tr 
                   key={exec.id} 
-                  className={`transition-colors hover:bg-slate-800/40 ${
+                  className={`grid grid-cols-2 xs:grid-cols-4 gap-x-3 gap-y-2 p-4 lg:p-0 lg:table-row transition-colors hover:bg-slate-800/40 ${
                     isError ? 'bg-rose-950/10' : ''
                   }`}
                 >
                   {/* Process Name */}
-                  <td className="py-3.5 px-4">
-                    <div className="flex flex-col">
+                  <td className="col-span-2 xs:col-span-3 lg:py-3.5 lg:px-4 min-w-0">
+                    <div className="flex flex-col min-w-0">
                       <span className="font-semibold text-slate-200 text-xs">
                         {exec.processName}
                       </span>
-                      <span className="text-[11px] font-mono text-slate-500">
+                      <span className="text-[11px] font-mono text-slate-500 break-all">
                         {exec.id}
                       </span>
                       {exec.errorMessage && (
@@ -163,20 +163,22 @@ export const ExecutionTable: React.FC<ExecutionTableProps> = ({
                   </td>
 
                   {/* Status Badge */}
-                  <td className="py-3.5 px-4 whitespace-nowrap">
+                  <td className="col-span-2 xs:col-span-1 row-start-1 xs:row-start-auto justify-self-start xs:justify-self-end lg:justify-self-auto lg:py-3.5 lg:px-4 whitespace-nowrap">
                     {getStatusBadge(exec.status, exec.reprocessed)}
                   </td>
 
                   {/* Atom */}
-                  <td className="py-3.5 px-4 whitespace-nowrap">
-                    <div className="flex flex-col">
-                      <span className="text-slate-300 font-medium">{exec.atomName}</span>
+                  <td className="col-span-2 xs:col-span-1 lg:py-3.5 lg:px-4 lg:whitespace-nowrap min-w-0">
+                    <span className="lg:hidden block text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">Atom</span>
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-slate-300 font-medium truncate">{exec.atomName}</span>
                       <span className="text-[10px] text-slate-500">{exec.environment}</span>
                     </div>
                   </td>
 
                   {/* Docs in/out */}
-                  <td className="py-3.5 px-4 whitespace-nowrap font-mono text-slate-300">
+                  <td className="lg:py-3.5 lg:px-4 whitespace-nowrap font-mono text-slate-300">
+                    <span className="lg:hidden block text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">Documents</span>
                     <span className="text-slate-400">{exec.inboundDocs}</span> in / 
                     <span className={isError ? "text-rose-400 font-bold ml-1" : "text-slate-300 ml-1"}>
                       {exec.outboundDocs}
@@ -184,18 +186,20 @@ export const ExecutionTable: React.FC<ExecutionTableProps> = ({
                   </td>
 
                   {/* Duration */}
-                  <td className="py-3.5 px-4 whitespace-nowrap font-mono text-slate-400">
+                  <td className="lg:py-3.5 lg:px-4 whitespace-nowrap font-mono text-slate-400">
+                    <span className="lg:hidden block text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">Duration</span>
                     {(exec.durationMs / 1000).toFixed(2)}s
                   </td>
 
                   {/* Timestamp */}
-                  <td className="py-3.5 px-4 whitespace-nowrap text-slate-400 text-[11px]">
+                  <td className="lg:py-3.5 lg:px-4 whitespace-nowrap text-slate-400 text-[11px]">
+                    <span className="lg:hidden block text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">Started</span>
                     {new Date(exec.startedAt).toLocaleTimeString()}
                   </td>
 
                   {/* Action Buttons */}
-                  <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                    <div className="flex items-center justify-end gap-2">
+                  <td className="col-span-2 xs:col-span-4 lg:py-3.5 lg:px-4 lg:text-right whitespace-nowrap">
+                    <div className="flex items-center justify-start lg:justify-end gap-2">
                       {isError ? (
                         <button
                           onClick={() => onSelectExecution(exec)}

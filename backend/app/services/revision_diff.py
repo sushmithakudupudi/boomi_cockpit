@@ -33,6 +33,21 @@ PROPERTY_SCOPES = {
     "tradingpartner": "Trading Partner Property",
 }
 
+SHAPE_TYPE_LABELS = {
+    "start": "Start", "stop": "Stop", "connectoraction": "Connector", "map": "Map",
+    "documentproperties": "Set Properties", "processproperties": "Set Process Properties",
+    "message": "Message", "decision": "Decision", "branch": "Branch", "route": "Route",
+    "returndocuments": "Return Documents", "notify": "Notify", "dataprocess": "Data Process",
+    "processcall": "Process Call", "processroute": "Process Route", "trycatch": "Try/Catch",
+    "flowcontrol": "Flow Control", "cleanse": "Cleanse", "businessrules": "Business Rules",
+    "exception": "Exception", "findchanges": "Find Changes", "doccacheretrieve": "Retrieve From Cache",
+    "doccacheload": "Add To Cache", "doccacheremove": "Remove From Cache", "programcommand": "Program Command",
+    "combine": "Combine", "split": "Split", "splitbybranch": "Split", "note": "Note", "addtocache": "Add To Cache",
+    "retrievefromcache": "Retrieve From Cache", "removefromcache": "Remove From Cache",
+    "catcherrors": "Try/Catch",
+}
+GUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+
 Flat = Dict[str, str]
 
 
@@ -150,6 +165,7 @@ class _Changes:
             "shapeId": shape_id,
             "shapeName": shape_name,
             "shapeType": shape_type,
+            "shapeTypeLabel": shape_type_label(shape_type) if shape_type else None,
             "old": old,
             "new": new,
             "fieldChanges": fields or [],
@@ -242,8 +258,21 @@ def _category(shape_type: str) -> str:
     return "other"
 
 
+def shape_type_label(shape_type: str) -> str:
+    return SHAPE_TYPE_LABELS.get(shape_type, shape_type.title() if shape_type else "Shape")
+
+
 def _shape_title(m: Dict[str, Any]) -> str:
-    return m["label"] or m["id"]
+    """Name as shown on the Boomi canvas: the user label, else a descriptive default."""
+    if m["label"]:
+        return m["label"]
+    if m["type"] == "connectoraction" and m["cfg_el"] is not None:
+        ca = m["cfg_el"].find("{*}connectoraction")
+        if ca is not None:
+            desc = " ".join(v for v in (ca.attrib.get("connectorType", ""), ca.attrib.get("actionType", "")) if v)
+            if desc:
+                return f"{desc} ({m['id']})"
+    return f"{shape_type_label(m['type'])} ({m['id']})"
 
 
 def _param_summary(prop: ET.Element) -> str:
@@ -324,24 +353,40 @@ def _diff_setprops(sid: str, lm: Optional[Dict], rm: Optional[Dict], ch: _Change
                old=_display_flat(non_prop(lcont)), new=_display_flat(non_prop(rcont)), fields=fields, **{**base, "scope": "shape"})
 
 
-def _diff_connections(sid: str, lm: Dict, rm: Dict, ch: _Changes) -> None:
-    base = dict(shape_id=sid, shape_name=_shape_title(rm), shape_type=rm["type"], category="other", scope="connection")
+def _conn_view(c: Dict[str, str], names: Dict[str, str]) -> Dict[str, str]:
+    """Connection attributes with the target shape's name next to its id."""
+    out = dict(c)
+    if c.get("toShape"):
+        out["toShape"] = names.get(c["toShape"], c["toShape"])
+    return out
+
+
+def _diff_connections(sid: str, lm: Dict, rm: Dict, ch: _Changes, names: Dict[str, str]) -> None:
+    src = _shape_title(rm)
+    base = dict(shape_id=sid, shape_name=src, shape_type=rm["type"], category="other", scope="connection")
+    target = lambda c: names.get(c.get("toShape", ""), c.get("toShape", "?"))
     for key in sorted(set(lm["conns"]) | set(rm["conns"])):
         lc, rc = lm["conns"].get(key), rm["conns"].get(key)
         if lc is None:
-            ch.add(change="added", title=f"Connection added: {sid} → {rc.get('toShape', '?')}", new=rc, **base)
+            ch.add(change="added", title=f"Connection added: {src} → {target(rc)}", new=_conn_view(rc, names), **base)
         elif rc is None:
-            ch.add(change="removed", title=f"Connection removed: {sid} → {lc.get('toShape', '?')}", old=lc, **base)
+            ch.add(change="removed", title=f"Connection removed: {src} → {target(lc)}", old=_conn_view(lc, names), **base)
         else:
+            # Compare raw shape ids so renaming the target shape is not reported as a re-route.
             fields = _field_changes(lc, rc)
+            for f in fields:
+                if f["field"] == "toShape":
+                    f["old"], f["new"] = names.get(f["old"], f["old"]), names.get(f["new"], f["new"])
+            lv, rv = _conn_view(lc, names), _conn_view(rc, names)
             if fields:
-                ch.add(change="modified", title=f"Connection re-routed: {sid} → {rc.get('toShape', '?')}",
-                       old=lc, new=rc, fields=fields, **base)
+                ch.add(change="modified", title=f"Connection re-routed: {src} → {target(rc)} (was {target(lc)})",
+                       old=lv, new=rv, fields=fields, **base)
 
 
-def _diff_shape_pair(sid: str, lm: Dict, rm: Dict, ch: _Changes) -> None:
+def _diff_shape_pair(sid: str, lm: Dict, rm: Dict, ch: _Changes, names: Dict[str, str]) -> None:
     if lm["type"] != rm["type"]:
-        ch.add(category="other", change="modified", scope="shape", title=f"Shape type changed: {_shape_title(rm)}",
+        ch.add(category="other", change="modified", scope="shape",
+               title=f"Shape type changed: {_shape_title(rm)} ({shape_type_label(lm['type'])} → {shape_type_label(rm['type'])})",
                shape_id=sid, shape_name=_shape_title(rm), shape_type=rm["type"],
                old={"shapetype": lm["type"], "label": lm["label"]}, new={"shapetype": rm["type"], "label": rm["label"]},
                fields=[{"field": "shapetype", "old": lm["type"], "new": rm["type"], "masked": False, "positional": False}],
@@ -362,25 +407,25 @@ def _diff_shape_pair(sid: str, lm: Dict, rm: Dict, ch: _Changes) -> None:
         fields = _field_changes(lf, rf)
         label = _shape_title(rm)
         if fields:
-            title = {"map": f"Map shape reference changed: {label}",
-                     "connectoraction": f"Connector operation settings changed: {label}",
-                     "connector": f"Connector settings changed: {label}"}.get(rm["type"], f"Shape configuration modified: {label}")
+            title = {"map": f"Map shape now uses a different Map: {label}",
+                     "connectoraction": f"Connector settings changed: {label}",
+                     "connector": f"Connector settings changed: {label}"}.get(rm["type"], f"{shape_type_label(rm['type'])} settings changed: {label}")
             ch.add(category=cat, change="modified", scope="shape", title=title, shape_id=sid, shape_name=label,
                    shape_type=rm["type"], old=_display_flat(lf), new=_display_flat(rf), fields=fields)
         elif ch.include_unchanged:
             ch.add(category=cat, change="unchanged", scope="shape", title=f"Shape unchanged: {label}", shape_id=sid,
                    shape_name=label, shape_type=rm["type"], old=_display_flat(lf), new=_display_flat(rf))
-    _diff_connections(sid, lm, rm, ch)
+    _diff_connections(sid, lm, rm, ch, names)
 
 
-def _diff_shape_presence(sid: str, m: Dict, added: bool, ch: _Changes, other_side: List[Dict]) -> None:
+def _diff_shape_presence(sid: str, m: Dict, added: bool, ch: _Changes, other_side: List[Dict], names: Dict[str, str]) -> None:
     cat = _category(m["type"])
     label = _shape_title(m)
     cfg = _cfg_flat(m["cfg_el"])
     ambiguous = None
     for o in other_side:
         if o["type"] == m["type"] and o["label"] == m["label"] and _cfg_flat(o["cfg_el"]) == cfg:
-            ambiguous = (f"Identical shape also exists as {o['id']} on the other revision; "
+            ambiguous = (f"Identical shape also exists as {_shape_title(o)} on the other revision; "
                          "this may be a recreated shape rather than a real add/remove.")
             break
     if cat == "setprops":
@@ -398,10 +443,10 @@ def _diff_shape_presence(sid: str, m: Dict, added: bool, ch: _Changes, other_sid
                    title=f"Set Properties shape {'added' if added else 'removed'}: {label}", shape_id=sid,
                    shape_name=label, shape_type=m["type"], ambiguous=ambiguous)
         return
-    entry = {"shapetype": m["type"], "label": m["label"], **_display_flat(cfg)}
-    entry["connections"] = ", ".join(sorted(c.get("toShape", "?") for c in m["conns"].values())) or None
+    entry = {"shapetype": shape_type_label(m["type"]), "label": m["label"], **_display_flat(cfg)}
+    entry["connections"] = ", ".join(sorted(names.get(c.get("toShape", ""), c.get("toShape", "?")) for c in m["conns"].values())) or None
     ch.add(category=cat, change="added" if added else "removed", scope="shape",
-           title=f"Shape {'added' if added else 'removed'}: {label} ({m['type']})",
+           title=f"{shape_type_label(m['type'])} shape {'added' if added else 'removed'}: {label}",
            shape_id=sid, shape_name=label, shape_type=m["type"],
            new=entry if added else None, old=None if added else entry, ambiguous=ambiguous)
 
@@ -416,13 +461,14 @@ def diff_process(l: ET.Element, r: ET.Element, ch: _Changes) -> None:
                    old=_display_flat(lf), new=_display_flat(rf), fields=fields)
 
     ls, rs = _shapes(l), _shapes(r)
+    names = {"unset": "(not connected)", **{k: _shape_title(m) for k, m in ls.items()}, **{k: _shape_title(m) for k, m in rs.items()}}
     for sid in sorted(set(ls) | set(rs), key=lambda s: (len(s), s)):
         if sid in ls and sid in rs:
-            _diff_shape_pair(sid, ls[sid], rs[sid], ch)
+            _diff_shape_pair(sid, ls[sid], rs[sid], ch, names)
         elif sid in rs:
-            _diff_shape_presence(sid, rs[sid], True, ch, [s for k, s in ls.items() if k not in rs])
+            _diff_shape_presence(sid, rs[sid], True, ch, [s for k, s in ls.items() if k not in rs], names)
         else:
-            _diff_shape_presence(sid, ls[sid], False, ch, [s for k, s in rs.items() if k not in ls])
+            _diff_shape_presence(sid, ls[sid], False, ch, [s for k, s in rs.items() if k not in ls], names)
 
 
 def map_references(root: ET.Element) -> Dict[str, str]:
@@ -559,6 +605,27 @@ def compare_definitions(left_xml: str, right_xml: str, include_unchanged: bool =
             diff_generic(l, r, ch)
     return {"kind": kind, "changes": ch.items, "warnings": warnings,
             "mapRefs": {"left": map_references(l) if kind == "process" else {}, "right": map_references(r) if kind == "process" else {}}}
+
+
+def referenced_ids(changes: List[Dict[str, Any]]) -> Set[str]:
+    """Every component id (GUID) mentioned in a change's values, e.g. profiles, connections, operations, maps."""
+    found: Set[str] = set()
+
+    def scan(v: Any) -> None:
+        if isinstance(v, str):
+            found.update(m.lower() for m in GUID.findall(v))
+        elif isinstance(v, dict):
+            for x in v.values():
+                scan(x)
+        elif isinstance(v, list):
+            for x in v:
+                scan(x)
+
+    for c in changes:
+        scan(c["old"])
+        scan(c["new"])
+        scan(c["fieldChanges"])
+    return found
 
 
 def compare_maps(left_xml: str, right_xml: str, source: Dict[str, str], include_unchanged: bool, start_index: int) -> List[Dict[str, Any]]:

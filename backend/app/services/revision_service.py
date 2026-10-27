@@ -28,6 +28,7 @@ logger = logging.getLogger("revision_service")
 LIST_TTL = 300
 MAX_COMPONENTS = 2000
 MAX_DEFINITIONS = 300
+MAX_REF_LOOKUPS = 25
 SOURCES = ("live", "sample")
 
 
@@ -196,6 +197,32 @@ class RevisionService:
                        "authors": sorted({c["modifiedBy"] for c in items if c["modifiedBy"]})},
         }
 
+    # ------------------------------------------------------------------ reference names
+    async def resolve_references(self, source: str, ids: set) -> Dict[str, Dict[str, str]]:
+        """{component id: {name, type}} for ids referenced in a comparison (profiles, connections, operations, maps...).
+
+        Uses the cached component list first; ids missing from it (e.g. deleted components) are looked up
+        individually. Anything that cannot be resolved is simply left out and shown as the raw id."""
+        if not ids:
+            return {}
+        try:
+            known = {(c["componentId"] or "").lower(): c for c in await self.all_components(source)}
+        except RevisionError:
+            known = {}
+        out = {i: {"name": known[i]["name"], "type": known[i]["type"]} for i in ids if i in known}
+        missing = sorted(i for i in ids if i not in known)[:MAX_REF_LOOKUPS]
+        if missing and source == "live":
+            async def one(cid: str) -> None:
+                try:
+                    recs = await self._query_metadata({"argument": [cid], "operator": "EQUALS", "property": "componentId"})
+                except RevisionError:
+                    return
+                if recs:
+                    rec = max(recs, key=lambda r: int(r.get("version", 0)))
+                    out[cid] = {"name": rec.get("name") or cid, "type": rec.get("type") or "unknown"}
+            await asyncio.gather(*(one(c) for c in missing))
+        return out
+
     # ------------------------------------------------------------------ compare
     @staticmethod
     def _version_at(revs: List[Dict[str, Any]], when: Optional[str]) -> Optional[Dict[str, Any]]:
@@ -266,6 +293,7 @@ class RevisionService:
             "changes": changes,
             "warnings": warnings,
             "resolvedMaps": resolved,
+            "references": await self.resolve_references(source, diff.referenced_ids(changes)),
         }
 
     async def compare_xml(self, left_xml: str, right_xml: str, left_label: str, right_label: str, include_unchanged: bool) -> Dict[str, Any]:
@@ -280,7 +308,7 @@ class RevisionService:
         return {
             "source": "upload", "componentId": "uploaded", "componentName": right_label, "kind": result["kind"],
             "left": label(left_label), "right": label(right_label),
-            "summary": diff.summarize(result["changes"]), "changes": result["changes"], "warnings": warnings, "resolvedMaps": [],
+            "summary": diff.summarize(result["changes"]), "changes": result["changes"], "warnings": warnings, "resolvedMaps": [], "references": {},
         }
 
     @staticmethod

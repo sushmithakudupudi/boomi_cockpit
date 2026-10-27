@@ -57,6 +57,7 @@ export interface ChangeEntry {
   shapeId: string | null;
   shapeName: string | null;
   shapeType: string | null;
+  shapeTypeLabel: string | null;
   old: Record<string, unknown> | null;
   new: Record<string, unknown> | null;
   fieldChanges: FieldChange[];
@@ -90,4 +91,11 @@ export interface ComparisonResult {
     rightVersion: number | null;
     mapName?: string;
   }[];
+  /** Names of components referenced by id in the changes (profiles, connections, operations, maps...). */
+  references: Record<string, ComponentRef>;
+}
+
+export interface ComponentRef {
+  name: string;
+  type: string;
 }

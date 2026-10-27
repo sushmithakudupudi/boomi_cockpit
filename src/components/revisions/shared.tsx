@@ -1,11 +1,27 @@
 import React from 'react';
-import { AlertTriangle, FlaskConical, Loader2, RefreshCw } from 'lucide-react';
+import { AlertTriangle, FlaskConical, Inbox, Loader2, RefreshCw } from 'lucide-react';
 import type { ResultSource } from '../../types/revisions';
+import { componentTypeLabel, initials, typeTone } from './utils';
 
 export const Spinner: React.FC<{ label: string }> = ({ label }) => (
   <div className="flex items-center justify-center gap-2.5 py-16 text-xs text-slate-400">
     <Loader2 className="w-4 h-4 animate-spin text-boomi-accent" />
     <span>{label}</span>
+  </div>
+);
+
+export const SkeletonRows: React.FC<{ rows?: number }> = ({ rows = 6 }) => (
+  <div className="rounded-2xl border border-boomi-cardBorder bg-boomi-card divide-y divide-boomi-cardBorder/60" aria-busy="true" aria-label="Loading">
+    {Array.from({ length: rows }, (_, i) => (
+      <div key={i} className="flex items-center gap-4 px-4 py-3.5 animate-pulse">
+        <div className="w-8 h-8 rounded-lg bg-slate-800" />
+        <div className="flex-1 space-y-2">
+          <div className="h-3 rounded bg-slate-800" style={{ width: `${40 + ((i * 17) % 35)}%` }} />
+          <div className="h-2 rounded bg-slate-800/70 w-1/4" />
+        </div>
+        <div className="hidden sm:block h-5 w-20 rounded-full bg-slate-800" />
+      </div>
+    ))}
   </div>
 );
 
@@ -34,11 +50,26 @@ export const ErrorState: React.FC<{
   </div>
 );
 
-export const EmptyState: React.FC<{ title: string; message: string }> = ({ title, message }) => (
-  <div className="flex flex-col items-center text-center py-14 rounded-2xl border border-dashed border-slate-700 bg-slate-900/40">
+export const EmptyState: React.FC<{ title: string; message: string; children?: React.ReactNode }> = ({ title, message, children }) => (
+  <div className="flex flex-col items-center text-center py-14 px-4 rounded-2xl border border-dashed border-slate-700 bg-slate-900/40">
+    <Inbox className="w-6 h-6 text-slate-600 mb-2" />
     <h3 className="text-sm font-bold text-white">{title}</h3>
     <p className="text-xs text-slate-400 mt-1 max-w-md">{message}</p>
+    {children && <div className="mt-3">{children}</div>}
   </div>
+);
+
+export const TypeBadge: React.FC<{ type: string; className?: string }> = ({ type, className = '' }) => (
+  <span title={type} className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-semibold whitespace-nowrap ${typeTone(type)} ${className}`}>
+    {componentTypeLabel(type)}
+  </span>
+);
+
+export const Avatar: React.FC<{ who: string | null | undefined; size?: 'sm' | 'md' }> = ({ who, size = 'sm' }) => (
+  <span title={who ?? 'Unknown'}
+    className={`inline-flex items-center justify-center shrink-0 rounded-full bg-gradient-to-br from-slate-700 to-slate-800 border border-slate-600 text-slate-200 font-bold ${size === 'sm' ? 'w-6 h-6 text-[9px]' : 'w-8 h-8 text-[10px]'}`}>
+    {initials(who)}
+  </span>
 );
 
 /** Always shown when the data on screen is not live Boomi data. */

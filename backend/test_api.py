@@ -6,10 +6,10 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
-from fastapi.testclient import TestClient
+import test_support
 from app.main import app
 
-client = TestClient(app)
+client = test_support.signed_in_client()
 
 def test_endpoints():
     print("Testing /api/health...")

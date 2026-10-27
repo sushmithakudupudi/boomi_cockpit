@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from contextlib import asynccontextmanager
@@ -17,7 +17,9 @@ from .routes import (
     system,
     revisions,
     notifications,
+    auth,
 )
+from .db import init_db
 from .services.boomi_service import boomi_service
 from .services import push_notifications
 
@@ -27,6 +29,7 @@ logger = logging.getLogger("boomi_main")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting Boomi Companion Command Center API...")
+    init_db()
     # Asynchronously synchronize live Atoms & Executions from Dell Boomi AtomSphere
     asyncio.create_task(boomi_service.sync_from_boomi_platform())
     # Poll Boomi for new failures and push alerts to subscribed browsers
@@ -90,17 +93,10 @@ async def websocket_endpoint(websocket: WebSocket):
     except Exception as e:
         manager.disconnect(websocket)
 
-# Include Routers under /api
-api_router = FastAPI()
-app.include_router(executions.router, prefix=settings.API_PREFIX)
-app.include_router(companion.router, prefix=settings.API_PREFIX)
-app.include_router(reprocess.router, prefix=settings.API_PREFIX)
-app.include_router(atoms.router, prefix=settings.API_PREFIX)
-app.include_router(topology.router, prefix=settings.API_PREFIX)
-app.include_router(stats.router, prefix=settings.API_PREFIX)
-app.include_router(system.router, prefix=settings.API_PREFIX)
-app.include_router(revisions.router, prefix=settings.API_PREFIX)
-app.include_router(notifications.router, prefix=settings.API_PREFIX)
+# Include Routers under /api. Sign-in endpoints are public; everything else needs a session.
+app.include_router(auth.router, prefix=settings.API_PREFIX)
+for protected in (executions, companion, reprocess, atoms, topology, stats, system, revisions, notifications):
+    app.include_router(protected.router, prefix=settings.API_PREFIX, dependencies=[Depends(auth.require_user)])
 
 @app.get("/", include_in_schema=False)
 def root():

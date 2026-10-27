@@ -40,6 +40,9 @@ interface SidebarProps {
   healingAlertCount?: number;
   executionsCount?: number;
   atom?: AtomHealth;
+  /** Small screens: the sidebar is an off-canvas drawer shown only while this is true. */
+  mobileOpen?: boolean;
+  onCloseMobile?: () => void;
 }
 
 const COLLAPSE_KEY = 'boomiops.sidebarCollapsed';
@@ -73,14 +76,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
   healingAlertCount = 0,
   executionsCount = 0,
   atom,
+  mobileOpen = false,
+  onCloseMobile,
 }) => {
-  const [isCollapsed, setIsCollapsed] = useState(readCollapsed);
+  const [collapsedPref, setCollapsedPref] = useState(readCollapsed);
+  // The drawer on small screens always shows full labels.
+  const isCollapsed = collapsedPref && !mobileOpen;
   const [isHealingOpen, setIsHealingOpen] = useState(true);
   const [isCompilerOpen, setIsCompilerOpen] = useState(true);
 
   const toggleCollapsed = () => {
-    const next = !isCollapsed;
-    setIsCollapsed(next);
+    const next = !collapsedPref;
+    setCollapsedPref(next);
     try {
       localStorage.setItem(COLLAPSE_KEY, next ? '1' : '0');
     } catch {
@@ -146,10 +153,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   return (
+    <>
+    {mobileOpen && <div className="md:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" onClick={onCloseMobile} aria-hidden="true" />}
     <aside
-      className={`sticky top-0 h-screen shrink-0 flex flex-col bg-boomi-dark border-r border-boomi-cardBorder transition-[width] duration-200 ${
-        isCollapsed ? 'w-[72px]' : 'w-64'
-      }`}
+      className={`fixed md:sticky inset-y-0 left-0 md:top-0 z-50 md:z-auto h-screen shrink-0 flex flex-col bg-boomi-dark border-r border-boomi-cardBorder transition-[width,transform] duration-200 w-64 ${
+        collapsedPref ? 'md:w-[72px]' : 'md:w-64'
+      } ${mobileOpen ? 'translate-x-0 shadow-2xl shadow-black/60' : '-translate-x-full'} md:translate-x-0`}
     >
       {/* Brand */}
       <div className={`h-16 flex items-center gap-3 border-b border-boomi-cardBorder ${isCollapsed ? 'justify-center' : 'px-4'}`}>
@@ -165,15 +174,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
       </div>
 
-      {/* Navigation */}
-      <nav className={`flex-1 p-3 space-y-1 ${isCollapsed ? '' : 'overflow-y-auto'}`}>
-        {!isCollapsed && (
-          <div className="px-2 pb-2 text-[10px] uppercase font-bold tracking-wider text-slate-500">Modules</div>
-        )}
+      {/* Navigation (picking a page closes the drawer on small screens) */}
+      <nav
+        className={`flex-1 p-3 space-y-1 ${isCollapsed ? '' : 'overflow-y-auto'}`}
+        onClick={(e) => { if ((e.target as HTMLElement).closest('button')) onCloseMobile?.(); }}
+      >
+ 
 
         {moduleButton(
           'compiler',
-          'ConnectCraft',
+          'ArchForge',
           'Blueprint & Spec Prompt',
           Wand2,
           <ChevronDown
@@ -187,7 +197,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {activeModule === 'compiler' && isCompilerOpen && (
           <div className={isCollapsed ? 'space-y-1 pt-1' : 'ml-7 pl-3 border-l border-slate-800 space-y-0.5 py-1'}>
             {([
-              { id: 'editor', label: '+ New', icon: Plus, count: undefined },
+              { id: 'editor', label: 'New', icon: Plus, count: undefined },
               { id: 'draft', label: 'Draft', icon: FileEdit, count: draftCount },
               { id: 'sent', label: 'Sent', icon: Send, count: sentCount },
               { id: 'deleted', label: 'Deleted Item(s)', icon: Trash2, count: deletedCount },
@@ -227,7 +237,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {moduleButton(
           'healing',
-          'Self-Healing',
+          'HealIQ',
           'Triage & auto-reprocess',
           HeartPulse,
           <div className="flex items-center gap-1.5">
@@ -281,7 +291,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         )}
 
-        {moduleButton('revisions', 'Revision History', 'Browse & compare versions', GitCompareArrows)}
+        {moduleButton('revisions', 'RevIQ', 'Browse & compare versions', GitCompareArrows)}
 
         {PLACEHOLDER_MODULES.map(({ id, label, hint, icon }) => (
           <React.Fragment key={id}>
@@ -323,7 +333,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <button
           onClick={toggleCollapsed}
           title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className={`w-full flex items-center gap-2 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-slate-800 text-xs transition cursor-pointer ${
+          className={`hidden md:flex w-full items-center gap-2 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-slate-800 text-xs transition cursor-pointer ${
             isCollapsed ? 'justify-center p-2' : 'px-3 py-2'
           }`}
         >
@@ -338,5 +348,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
       </div>
     </aside>
+    </>
   );
 };

@@ -8,7 +8,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-STORE_PATH = Path(__file__).resolve().parents[2] / "storage" / "blueprints.json"
+# Vercel's filesystem is read-only except /tmp (which is not persistent across cold starts).
+_STORE_DIR = Path("/tmp/storage") if os.getenv("VERCEL") else Path(__file__).resolve().parents[2] / "storage"
+STORE_PATH = _STORE_DIR / "blueprints.json"
 _ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _lock = threading.Lock()
 

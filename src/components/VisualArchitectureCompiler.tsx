@@ -387,20 +387,20 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
     <div className="space-y-6 pb-12 animate-fade-in text-slate-200">
       
       {/* Top Banner & Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-slate-800">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 pb-2 border-b border-slate-800">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2 mb-1">
             <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-purple-500/10 border border-purple-500/30 text-[11px] font-bold tracking-wider uppercase text-purple-300">
               <Sparkles className="w-3 h-3 text-purple-400" />
               VISUAL ARCHITECTURE COMPILER
             </span>
-            <span className="text-xs text-slate-500">•</span>
-            <div className="flex items-center gap-1 text-xs text-slate-400">
+            <span className="hidden xs:inline text-xs text-slate-500">•</span>
+            <div className="flex items-center gap-1 text-xs text-slate-400 min-w-0 max-w-full">
               <span>Template:</span>
               <select
                 value={selectedPresetId}
                 onChange={(e) => handleSelectPreset(e.target.value)}
-                className="bg-slate-900 border border-slate-700 rounded-md px-2 py-0.5 text-xs text-purple-300 focus:outline-none focus:border-purple-500 cursor-pointer"
+                className="min-w-0 max-w-[220px] sm:max-w-xs bg-slate-900 border border-slate-700 rounded-md px-2 py-0.5 text-xs text-purple-300 focus:outline-none focus:border-purple-500 cursor-pointer"
               >
                 <option value="" className="bg-slate-900 text-slate-200">Custom flow</option>
                 {PRESET_BLUEPRINTS.map(p => (
@@ -421,8 +421,8 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
         </div>
 
         {/* Blueprint ID Badge and Reset */}
-        <div className="flex items-center gap-2.5 shrink-0 self-start md:self-auto">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 text-xs font-mono text-slate-300">
+        <div className="flex flex-wrap items-center gap-2.5 w-full xl:w-auto xl:shrink-0">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl min-w-0 flex-1 xl:flex-none bg-slate-900/90 border border-slate-700/80 text-xs font-mono text-slate-300">
             <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
             <span className="text-slate-400 font-sans text-[11px]">{buildResult ? 'SENT' : 'DRAFT'}</span>
             <input
@@ -431,9 +431,9 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
               onChange={(e) => setBlueprint(prev => ({ ...prev, title: e.target.value }))}
               aria-label="Blueprint name"
               maxLength={60}
-              className="w-44 bg-transparent border-b border-slate-700 focus:border-purple-500 text-purple-300 font-bold font-sans focus:outline-none"
+              className="min-w-0 flex-1 xl:flex-none xl:w-44 bg-transparent border-b border-slate-700 focus:border-purple-500 text-purple-300 font-bold font-sans focus:outline-none"
             />
-            <span className="text-slate-500 text-[10px]">{blueprint.blueprintId}</span>
+            <span className="hidden xs:inline text-slate-500 text-[10px] shrink-0">{blueprint.blueprintId}</span>
           </div>
 
           <button

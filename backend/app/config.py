@@ -38,4 +38,20 @@ class Settings:
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
     ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
 
+    # Database: SQLite file locally; set DATABASE_URL (e.g. Postgres) for anything persistent.
+    # Vercel's filesystem is read-only apart from /tmp, which does not survive cold starts.
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "") or (
+        "sqlite:////tmp/boomiops.db" if os.getenv("VERCEL")
+        else "sqlite:///" + os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "storage", "boomiops.db")
+    )
+
+    # Authentication
+    SESSION_HOURS: int = int(os.getenv("SESSION_HOURS", "12"))
+    REMEMBER_ME_DAYS: int = int(os.getenv("REMEMBER_ME_DAYS", "30"))
+    MAX_FAILED_LOGINS: int = int(os.getenv("MAX_FAILED_LOGINS", "5"))
+    LOCKOUT_MINUTES: int = int(os.getenv("LOCKOUT_MINUTES", "15"))
+    # Optional: create this admin on startup when the users table is empty.
+    BOOTSTRAP_ADMIN_EMAIL: str = os.getenv("BOOTSTRAP_ADMIN_EMAIL", "")
+    BOOTSTRAP_ADMIN_PASSWORD: str = os.getenv("BOOTSTRAP_ADMIN_PASSWORD", "")
+
 settings = Settings()

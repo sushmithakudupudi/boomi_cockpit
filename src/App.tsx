@@ -49,6 +49,7 @@ export function App() {
   });
   const [selectedExecution, setSelectedExecution] = useState<ExecutionRecord | null>(null);
   const [isCompanionOpen, setIsCompanionOpen] = useState(false);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   // A question to send to the Companion as soon as the drawer opens (e.g. "What changed?" on an incident)
   // Re-run: nothing starts until the user confirms in the dialog
   const [rerunTarget, setRerunTarget] = useState<ExecutionRecord | null>(null);
@@ -340,6 +341,8 @@ export function App() {
         healingAlertCount={failedCount}
         executionsCount={executions.length}
         atom={atoms[0]}
+        mobileOpen={isMobileNavOpen}
+        onCloseMobile={() => setIsMobileNavOpen(false)}
       />
 
       <div className="flex-1 min-w-0 flex flex-col">
@@ -355,6 +358,7 @@ export function App() {
       {/* Top Navbar with Tab Switcher */}
       <Navbar 
         onToggleCompanion={() => setIsCompanionOpen(!isCompanionOpen)}
+        onOpenNav={() => setIsMobileNavOpen(true)}
         companionUnreadCount={failedCount}
         isBackendConnected={isBackendConnected}
         atom={atoms[0]}
@@ -364,16 +368,16 @@ export function App() {
         onOpenFailure={handleOpenFailure}
         onMarkAllRead={handleMarkAllRead}
         sectionLabel={
-          activeModule === 'compiler' ? 'ConnectCraft'
-            : activeModule === 'revisions' ? 'Revision History'
-            : (activePlaceholder?.label ?? 'Self-Healing')
+          activeModule === 'compiler' ? 'ArchForge'
+            : activeModule === 'revisions' ? 'RevIQ'
+            : (activePlaceholder?.label ?? 'HealIQ')
         }
         pageLabel={
           activeModule === 'healing'
             ? (activeTab === 'cockpit' ? 'Live Cockpit' : 'Process Reporting')
             : activeModule === 'compiler'
               ? (compilerView === 'draft' ? 'Draft' : compilerView === 'sent' ? 'Sent' : compilerView === 'deleted' ? 'Deleted' : 'New')
-              : activeModule === 'revisions' ? 'Revision History' : 'Overview'
+              : activeModule === 'revisions' ? 'RevIQ' : 'Overview'
         }
       />
 
@@ -421,25 +425,25 @@ export function App() {
           <>
             {/* Banner Alert for real active error from Boomi platform */}
             {activeErrorExec ? (
-              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-rose-950/60 via-slate-900/90 to-boomi-dark border border-rose-500/40 p-4 sm:p-5 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-3.5">
+              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-rose-950/60 via-slate-900/90 to-boomi-dark border border-rose-500/40 p-4 sm:p-5 shadow-xl flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4">
+                <div className="flex items-start sm:items-center gap-3.5 min-w-0 w-full xl:w-auto xl:flex-1">
                   <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/30 text-rose-400 shrink-0">
                     <AlertTriangle className="w-5 h-5 animate-pulse" />
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-sm font-bold text-white">Active Integration Incident: {activeErrorExec.processName}</h2>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-sm font-bold text-white break-words min-w-0">Active Integration Incident: {activeErrorExec.processName}</h2>
                       <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30">
                         P1 Critical
                       </span>
                     </div>
-                    <p className="text-xs text-slate-300 mt-1 max-w-2xl font-mono truncate">
+                    <p className="text-xs text-slate-300 mt-1 max-w-2xl font-mono line-clamp-2 sm:truncate break-all sm:break-normal">
                       {activeErrorExec.errorMessage || "Process execution reported errors in Dell Boomi AtomSphere."}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2.5 shrink-0">
+                <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto xl:shrink-0">
                   <button
                     onClick={() => {
                       setSelectedExecution(activeErrorExec);
@@ -472,8 +476,8 @@ export function App() {
                 </div>
               </div>
             ) : (
-              <div className="rounded-2xl bg-gradient-to-r from-emerald-950/50 via-slate-900/80 to-boomi-dark border border-emerald-500/40 p-4 shadow-xl flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
+              <div className="rounded-2xl bg-gradient-to-r from-emerald-950/50 via-slate-900/80 to-boomi-dark border border-emerald-500/40 p-4 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+                <div className="flex items-center gap-3 min-w-0">
                   <div className="p-2.5 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-400">
                     <CheckCircle2 className="w-5 h-5" />
                   </div>

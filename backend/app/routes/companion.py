@@ -22,6 +22,7 @@ async def chat_with_companion(req: ChatRequest):
     Conversational AI interface powered by Boomi Companion.
     Provides natural language reasoning, error explanation, and remediation recommendations.
     """
+    await boomi_service.ensure_synced()
     message = await companion_ai_service.chat(
         prompt=req.prompt,
         execution_id=req.executionId,
@@ -113,6 +114,7 @@ async def triage_execution(execution_id: str):
     Decodes the raw failure stacktrace, maps it to the offending shape,
     and generates the automated correction patch using OpenAI + Boomi knowledge.
     """
+    await boomi_service.ensure_synced()
     record = boomi_service.get_execution_by_id(execution_id)
     if not record:
         raise HTTPException(status_code=404, detail=f"Execution with ID '{execution_id}' was not found.")

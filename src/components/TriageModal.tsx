@@ -258,7 +258,7 @@ export const TriageModal: React.FC<TriageModalProps> = ({
               ) : (
                 <>
                   <Zap className="w-4 h-4 text-amber-200" />
-                  <span>Execute Self-Healing & Reprocess</span>
+                  <span>Execute HealIQ & Reprocess</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </>
               )}

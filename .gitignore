@@ -34,3 +34,7 @@ __pycache__/
 # Saved compiler blueprints
 backend/storage/
 .venv
+.vercel
+
+# Lock files
+package-lock.json

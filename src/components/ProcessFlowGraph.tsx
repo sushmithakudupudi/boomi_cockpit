@@ -104,8 +104,8 @@ export const ProcessFlowGraph: React.FC<ProcessFlowGraphProps> = ({
   return (
     <div className="relative w-full h-[520px] bg-slate-950/80 rounded-2xl border border-slate-800/80 shadow-2xl overflow-hidden flex flex-col">
       {/* Canvas Top Bar */}
-      <div className="flex flex-wrap items-center justify-between px-5 py-3 border-b border-slate-800/80 bg-slate-900/90 backdrop-blur z-10 gap-3">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center justify-between px-3 sm:px-5 py-3 border-b border-slate-800/80 bg-slate-900/90 backdrop-blur z-10 gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 min-w-0">
           <div className="flex items-center gap-2">
             <span className={`w-2.5 h-2.5 rounded-full ${hasErrorShape ? 'bg-rose-500 animate-ping' : 'bg-emerald-400'}`} />
             <span className="text-sm font-bold text-slate-100 truncate max-w-[280px]" title={activeProcessName}>
@@ -182,7 +182,7 @@ export const ProcessFlowGraph: React.FC<ProcessFlowGraphProps> = ({
             variant={BackgroundVariant.Dots} 
             gap={20} 
             size={1.2} 
-            color="#334155" 
+            color="rgb(var(--c-slate-700))" 
           />
           <Controls 
             className="!bg-slate-900/90 !border-slate-800 !rounded-xl !shadow-xl !fill-slate-300 overflow-hidden" 
@@ -191,9 +191,9 @@ export const ProcessFlowGraph: React.FC<ProcessFlowGraphProps> = ({
             nodeColor={(n) => {
               if (n.data?.status === 'error') return '#EF4444';
               if (n.data?.status === 'success') return '#10B981';
-              return '#475569';
+              return 'rgb(var(--c-slate-600))';
             }}
-            maskColor="rgba(2, 6, 23, 0.7)"
+            maskColor="rgb(var(--c-slate-950) / 0.7)"
             className="!bg-slate-900/90 !border-slate-800 !rounded-xl !shadow-xl overflow-hidden"
           />
         </ReactFlow>

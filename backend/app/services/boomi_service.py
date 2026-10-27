@@ -9,6 +9,8 @@ import asyncio
 
 logger = logging.getLogger("boomi_service")
 
+SYNC_RETRY_SECONDS = 30
+
 class BoomiService:
     def __init__(self):
         self._atoms: List[Dict[str, Any]] = []
@@ -18,7 +20,21 @@ class BoomiService:
         self._boomi_connected: bool = False
         self._rerun_times: Dict[str, float] = {}
         self._last_sync: float = 0.0
+        self._last_sync_attempt: float = 0.0
         self._sync_lock = asyncio.Lock()
+
+    async def ensure_synced(self) -> None:
+        """Load executions on demand when nothing has been synced yet.
+
+        The startup sync runs as a background task, which serverless hosts (e.g. Vercel) freeze
+        or never start, so request handlers call this before reading execution data."""
+        if self._executions or time.monotonic() - self._last_sync_attempt < SYNC_RETRY_SECONDS:
+            return
+        async with self._sync_lock:
+            if self._executions:
+                return
+            self._last_sync_attempt = time.monotonic()
+            await self.sync_from_boomi_platform()
 
     def _get_boomi_auth(self) -> Optional[tuple]:
         """Builds HTTP Basic Auth credentials for Dell Boomi AtomSphere REST API."""
@@ -432,6 +448,7 @@ class BoomiService:
         custom_overrides: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """Executes document replay through Boomi AtomSphere API."""
+        await self.ensure_synced()
         execution = self.get_execution_by_id(execution_id)
         if not execution:
             raise ValueError(f"Execution record with ID '{execution_id}' not found.")

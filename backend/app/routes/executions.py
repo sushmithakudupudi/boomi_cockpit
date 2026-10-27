@@ -19,6 +19,8 @@ async def list_executions(
     """
     if refresh:
         await boomi_service.refresh_executions_if_stale()
+    else:
+        await boomi_service.ensure_synced()
     records = boomi_service.get_executions(
         status=status,
         environment=environment,
@@ -29,10 +31,11 @@ async def list_executions(
     return records
 
 @router.get("/{execution_id}", response_model=ExecutionRecord)
-def get_execution_detail(execution_id: str):
+async def get_execution_detail(execution_id: str):
     """
     Fetches execution record details including document payload, stacktrace, and AI triage findings.
     """
+    await boomi_service.ensure_synced()
     record = boomi_service.get_execution_by_id(execution_id)
     if not record:
         raise HTTPException(status_code=404, detail=f"Execution with ID '{execution_id}' was not found.")
