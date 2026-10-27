@@ -4,9 +4,17 @@ import {
   Bot, 
   Send, 
   Zap, 
-  ChevronRight
+  ChevronRight,
+  ClipboardList,
+  LoaderCircle,
+  TriangleAlert,
+  CheckCircle2,
+  FileText,
+  FileType,
+  Loader2
 } from 'lucide-react';
-import type { CompanionMessage, ExecutionRecord } from '../types/boomi';
+import type { CompanionMessage, ExecutionRecord, ProcessDocRef } from '../types/boomi';
+import type { Stage } from '../types/compiler';
 import { api } from '../services/api';
 import { MarkdownText } from './MarkdownText';
 import { CATALOG_GROUPS, categorize } from '../services/shapeCatalog';
@@ -153,7 +161,57 @@ ${f.errorMessage.slice(0, 220)}` : ''}`,
   }, [executions]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [buildProposal, setBuildProposal] = useState<CompanionBuildProposal | null>(null);
+  const [downloading, setDownloading] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const handledDocRequestRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!docRequest || handledDocRequestRef.current === docRequest.requestId) return;
+    handledDocRequestRef.current = docRequest.requestId;
+    let cancelled = false;
+    const messageId = `process-doc-${docRequest.requestId}`;
+    setIsTyping(true);
+    api.generateProcessDoc(docRequest.source, docRequest.componentId, docRequest.version)
+      .then((doc) => {
+        if (cancelled) return;
+        setMessages((prev) => [...prev, {
+          id: messageId,
+          sender: 'companion',
+          text: `## ${docRequest.processName} — v${docRequest.version}\n\n${doc.summary}\n\n${doc.markdown}`,
+          timestamp: nowLabel(),
+          processDoc: { source: docRequest.source, componentId: docRequest.componentId, version: docRequest.version, processName: docRequest.processName },
+        }]);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setMessages((prev) => [...prev, {
+          id: messageId,
+          sender: 'companion',
+          text: `I couldn't generate the process documentation: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          timestamp: nowLabel(),
+        }]);
+      })
+      .finally(() => { if (!cancelled) setIsTyping(false); });
+    return () => { cancelled = true; };
+  }, [docRequest]);
+
+  const downloadDoc = async (messageId: string, doc: ProcessDocRef, format: 'docx' | 'pdf') => {
+    const key = `${messageId}-${format}`;
+    setDownloading(key);
+    try {
+      await api.downloadProcessDoc(doc.source, doc.componentId, doc.version, format);
+    } catch (error) {
+      setMessages((prev) => [...prev, {
+        id: `doc-download-error-${Date.now()}`,
+        sender: 'companion',
+        text: `The ${format.toUpperCase()} download failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        timestamp: nowLabel(),
+      }]);
+    } finally {
+      setDownloading(null);
+    }
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
