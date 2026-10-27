@@ -30,6 +30,7 @@ STATE = STORAGE / "notify_state.json"
 # VAPID 'sub' is shown to the push service; a neutral contact avoids sending a personal address
 VAPID_CLAIMS_SUB = "mailto:boomiops@example.com"
 POLL_SECONDS = 60
+MAX_AUTO_INVESTIGATIONS = 3  # per poll
 GROUP_THRESHOLD = 3  # more new failures than this in one poll become a single notification
 
 
@@ -156,6 +157,17 @@ def describe(failures: List[Dict[str, Any]]) -> Dict[str, str]:
     return {"title": f"{len(failures)} new Boomi failures", "body": ", ".join(names)[:160]}
 
 
+_investigation_tasks: set = set()
+
+
+def _start_investigation(record: Dict[str, Any]) -> None:
+    from .failure_investigator import investigate_failure
+
+    task = asyncio.create_task(investigate_failure(record))
+    _investigation_tasks.add(task)
+    task.add_done_callback(_investigation_tasks.discard)
+
+
 async def check_once() -> int:
     """One poll. Returns how many new failures were found."""
     state = _read_json(STATE, None)
@@ -166,6 +178,9 @@ async def check_once() -> int:
         return 0
 
     fresh = await find_new_failures(state["lastChecked"], state.get("seen", []))
+    # The investigator starts on its own for new failures (read-only; capped per poll and per day)
+    for rec in fresh[-MAX_AUTO_INVESTIGATIONS:]:
+        _start_investigation(rec)
     if fresh and list_subscriptions():
         msg = describe(fresh)
         outcome = await send_to_all(msg["title"], msg["body"])
@@ -182,6 +197,8 @@ async def watch_failures() -> None:
     while True:
         try:
             await check_once()
+            from .incident_memory import check_recoveries
+            await check_recoveries()
         except asyncio.CancelledError:
             raise
         except Exception as e:

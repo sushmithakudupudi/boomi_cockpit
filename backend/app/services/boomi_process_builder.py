@@ -34,7 +34,7 @@ def parse_call(notes: str, label: str) -> Tuple[str, str]:
     m = re.search(r"(?<![A-Za-z])(GET|POST|PUT|DELETE|QUERY)(?![A-Za-z])\s+/?([A-Za-z][\w/.-]*)", notes or "", re.I)
     if not m:
         return "GET", "/" + (re.sub(r"[^A-Za-z0-9]+", "", label) or "resource")
-    verb, obj = m.group(1).upper(), m.group(2).strip("/")
+    verb, obj = m.group(1).upper(), m.group(2).strip("/.")
     if verb == "QUERY":
         return "POST", f"/{obj}/query"
     return verb, f"/{obj}"

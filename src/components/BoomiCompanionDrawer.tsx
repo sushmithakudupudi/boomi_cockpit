@@ -16,6 +16,8 @@ interface BoomiCompanionDrawerProps {
   executions: ExecutionRecord[];
   onTriggerAutoHeal: (execId: string) => void;
   onOpenFlow: (exec: ExecutionRecord) => void;
+  /** Open an AI-written draft in ArchForge for review */
+  onOpenDraft?: (draftId: string) => void;
   /** A question to send automatically once the drawer is open */
   pendingPrompt?: string | null;
   onPromptConsumed?: () => void;
@@ -27,6 +29,7 @@ export const BoomiCompanionDrawer: React.FC<BoomiCompanionDrawerProps> = ({
   executions,
   onTriggerAutoHeal,
   onOpenFlow,
+  onOpenDraft,
   pendingPrompt,
   onPromptConsumed,
 }) => {
@@ -160,6 +163,8 @@ ${f.errorMessage.slice(0, 220)}` : ''}`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         }
       ]);
+    } else if (action.type === 'OPEN_DRAFT' && action.executionId) {
+      onOpenDraft?.(action.executionId);
     } else if (action.type === 'REPROCESS' && action.executionId) {
       onTriggerAutoHeal(action.executionId);
     } else if (action.type === 'VIEW_FLOW' && action.executionId) {

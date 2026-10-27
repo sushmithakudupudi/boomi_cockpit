@@ -44,6 +44,9 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
   const [blueprint, setBlueprint] = useState<BlueprintConfig>(() => createBlankConfig());
   const [businessRuleText, setBusinessRuleText] = useState<string>('');
   const [sentAt, setSentAt] = useState<string | null>(null);
+  // Drafts written by the AI keep their origin and assumptions, so the review banner survives edits
+  const [draftMeta, setDraftMeta] = useState<{ origin: string | null; assumptions: string[] }>({ origin: null, assumptions: [] });
+  const [bannerDismissed, setBannerDismissed] = useState(false);
   const [isCompiling, setIsCompiling] = useState<boolean>(false);
   const [copiedPrompt, setCopiedPrompt] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'prompt' | 'breakdown'>('prompt');
@@ -120,6 +123,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
         setProcessName(saved.processName || '');
         setBuildResult(saved.buildResult || null);
         setSentAt(saved.sentAt || null);
+        setDraftMeta({ origin: saved.origin || null, assumptions: Array.isArray(saved.assumptions) ? saved.assumptions : [] });
       }
       setRestored(true);
     });
@@ -140,6 +144,8 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
     status: buildResult ? 'sent' : 'draft',
     sentAt,
     buildResult,
+    origin: draftMeta.origin,
+    assumptions: draftMeta.assumptions,
     ...overrides,
   });
 
@@ -446,6 +452,22 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
           </button>
         </div>
       </div>
+
+      {/* Shown for drafts the AI wrote from a chat description: the user reviews before anything is built */}
+      {draftMeta.origin === 'ai-designer' && !buildResult && !bannerDismissed && (
+        <div className="rounded-xl bg-purple-950/30 border border-purple-500/40 px-4 py-3 text-xs text-purple-100 space-y-1.5">
+          <div className="flex items-start justify-between gap-3">
+            <div className="font-bold">Drafted by AI from your description. Review every shape before building.</div>
+            <button onClick={() => setBannerDismissed(true)} className="text-purple-300 hover:text-white cursor-pointer shrink-0" aria-label="Dismiss">Dismiss</button>
+          </div>
+          <p className="text-purple-200/80">Nothing has been created in Boomi. Check the shapes and notes, then use Build in Boomi, which shows the exact shape list and asks you to confirm.</p>
+          {draftMeta.assumptions.length > 0 && (
+            <ul className="list-disc ml-4 text-purple-200/80">
+              {draftMeta.assumptions.map((a, i) => <li key={i}>Assumption: {a}</li>)}
+            </ul>
+          )}
+        </div>
+      )}
 
       {/* Green Handoff Success Alert Banner */}
       <div className={`rounded-xl px-4 py-3 flex items-center justify-between shadow-lg border ${

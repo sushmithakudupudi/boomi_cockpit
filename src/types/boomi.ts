@@ -55,7 +55,7 @@ export interface CompanionMessage {
   text: string;
   timestamp: string;
   suggestedAction?: {
-    type: 'REPROCESS' | 'VIEW_FLOW' | 'INSPECT_PAYLOAD' | 'EXPORT_DOCS' | 'BUILD_PROCESS';
+    type: 'REPROCESS' | 'VIEW_FLOW' | 'INSPECT_PAYLOAD' | 'EXPORT_DOCS' | 'BUILD_PROCESS' | 'OPEN_DRAFT';
     label: string;
     executionId?: string;
     data?: any;

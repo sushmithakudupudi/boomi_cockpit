@@ -6,7 +6,7 @@ ExecutionStatus = Literal['SUCCESS', 'ERROR', 'WARNING', 'IN_PROGRESS']
 PayloadFormat = Literal['JSON', 'XML', 'EDI', 'CSV']
 EnvironmentType = str
 SeverityType = Literal['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']
-ActionType = Literal['REPROCESS', 'VIEW_FLOW', 'INSPECT_PAYLOAD', 'EXPORT_DOCS', 'BUILD_PROCESS']
+ActionType = Literal['REPROCESS', 'VIEW_FLOW', 'INSPECT_PAYLOAD', 'EXPORT_DOCS', 'BUILD_PROCESS', 'OPEN_DRAFT']
 AtomStatus = Literal['ONLINE', 'DEGRADED', 'OFFLINE']
 AtomType = Literal['Molecule', 'Cloud', 'Local Atom']
 
@@ -209,6 +209,8 @@ class SavedBlueprint(BaseModel):
     buildResult: Optional[Dict[str, Any]] = None
     updatedAt: Optional[str] = None
     deletedAt: Optional[str] = None
+    origin: Optional[str] = None  # 'ai-designer' for drafts the AI wrote
+    assumptions: List[str] = []
 
 class GenerateBlueprintPromptResponse(BaseModel):
     prompt: str

@@ -10,6 +10,7 @@ import { RevisionHistoryPage } from './components/revisions/RevisionHistoryPage'
 import { TriageModal } from './components/TriageModal';
 import { BoomiCompanionDrawer } from './components/BoomiCompanionDrawer';
 import { FailureHistory } from './components/FailureHistory';
+import { InvestigationCard } from './components/InvestigationCard';
 import { FailureAlertsToggle } from './components/FailureAlertsToggle';
 import { VisualArchitectureCompiler } from './components/VisualArchitectureCompiler';
 import { api } from './services/api';
@@ -90,6 +91,15 @@ export function App() {
     }
     setCompilerView(view);
     refreshRecords();
+  };
+
+  // A draft the AI wrote from a chat description: load it in ArchForge for review
+  const handleOpenAiDraft = async (draftId: string) => {
+    await refreshRecords();
+    setBlueprintId(draftId);
+    setCompilerView('editor');
+    setActiveModule('compiler');
+    setIsCompanionOpen(false);
   };
 
   const handleOpenDraft = (record: BlueprintRecord) => {
@@ -508,6 +518,14 @@ export function App() {
               lastFailure={lastFailure}
             />
 
+            {/* Read-only diagnosis of the open incident */}
+            {activeErrorExec && (
+              <InvestigationCard
+                execution={activeErrorExec}
+                onAskFollowUp={(prompt) => { setCompanionPrompt(prompt); setIsCompanionOpen(true); }}
+              />
+            )}
+
             {/* Browser alerts for new failures, delivered even when the page is closed */}
             <FailureAlertsToggle onShowToast={showToast} />
 
@@ -647,6 +665,7 @@ export function App() {
       <BoomiCompanionDrawer
         isOpen={isCompanionOpen}
         onClose={() => setIsCompanionOpen(false)}
+        onOpenDraft={handleOpenAiDraft}
         pendingPrompt={companionPrompt}
         onPromptConsumed={() => setCompanionPrompt(null)}
         executions={executions}

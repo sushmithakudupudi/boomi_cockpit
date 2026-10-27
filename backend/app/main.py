@@ -17,6 +17,10 @@ from .routes import (
     system,
     revisions,
     notifications,
+    investigations,
+    actions,
+    incidents,
+    designer,
     auth,
 )
 from .db import init_db
@@ -95,7 +99,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
 # Include Routers under /api. Sign-in endpoints are public; everything else needs a session.
 app.include_router(auth.router, prefix=settings.API_PREFIX)
-for protected in (executions, companion, reprocess, atoms, topology, stats, system, revisions, notifications):
+for protected in (executions, companion, reprocess, atoms, topology, stats, system, revisions, notifications, investigations, actions, incidents, designer):
     app.include_router(protected.router, prefix=settings.API_PREFIX, dependencies=[Depends(auth.require_user)])
 
 @app.get("/", include_in_schema=False)

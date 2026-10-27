@@ -1,6 +1,7 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from ..models.schemas import ReprocessRequest, ReprocessResponse, RerunProcessRequest, RerunProcessResponse
 from ..services.boomi_service import boomi_service
+from .actions import _approver
 
 router = APIRouter(tags=["Self-Healing Reprocessor"])
 
@@ -42,7 +43,7 @@ async def reprocess_execution_by_path(execution_id: str):
 
 
 @router.post("/processes/{process_id}/rerun", response_model=RerunProcessResponse)
-async def rerun_process(process_id: str, req: RerunProcessRequest):
+async def rerun_process(process_id: str, req: RerunProcessRequest, _user=Depends(_approver)):
     """
     Runs a deployed process once on an Atom. This executes real integration logic, so the request
     must carry confirm=true (the UI asks the user first).

@@ -101,7 +101,7 @@ YOUR ROLES & RESPONSIBILITIES:
 4. When asked for architecture documentation or Mermaid diagrams, generate standard sequence diagrams or flowcharts using ```mermaid syntax.
 
 ACCOUNT KNOWLEDGE (use your tools, never guess):
-- You have read-only tools for this Boomi account: get_environments, get_atoms, get_users_and_roles, get_audit_log, get_deployments, get_components, get_component_revisions.
+- You have read-only tools for this Boomi account: get_environments, get_atoms, get_users_and_roles, get_audit_log, get_deployments, get_components, get_component_revisions, get_process_executions, get_similar_incidents, draft_integration.
 - Call them for any question about environments, atoms, users and roles, who logged in or changed something, deployments, processes or other components. You may call several in one turn.
 - "Environments" are AtomSphere Environments (use get_environments). They are not the same as runtime Atoms (get_atoms).
 - For "what changed in <component>", "who edited it" or "why did it start failing", use get_component_revisions: it returns the revision history and the shape-level differences between two versions. Describe the changes in plain language (shape added or removed, property changed, connection re-routed).
@@ -121,7 +121,8 @@ LIVE OPERATIONAL TELEMETRY:
 {active_incident_text}
 
 BUILDING PROCESSES:
-- This chat cannot create processes. When the user asks to build or design one, outline the steps and a ```mermaid flowchart, then tell them to open the Architecture Compiler tab, lay out the shapes and use Build in Boomi (they confirm the shape list first). Do not add a build action tag.
+- When the user asks to build, design or create an integration or process, call draft_integration with their description, including every detail they gave. It saves a DRAFT in ArchForge and never builds anything in Boomi.
+- If it returns needs_more_info, ask exactly those questions and stop. If it returns drafted, summarise the shapes in order, list the assumptions, and name the shapes in buildReport.needsConfiguring that must be configured by hand in Boomi. Tell the user to review the draft in ArchForge (a button appears under your message) and to use Build in Boomi there, which asks them to confirm. Never say anything has been created in Boomi.
 
 OUTPUT CONVENTIONS:
 - Provide structured markdown with bold headings and bullet points.
@@ -139,6 +140,7 @@ OUTPUT CONVENTIONS:
             {"role": "user", "content": prompt},
         ]
         raw_text = ""
+        draft_id = None
         for _ in range(5):
             response = await self._openai_client.chat.completions.create(
                 model="gpt-4o-mini",
@@ -166,6 +168,8 @@ OUTPUT CONVENTIONS:
                 except ValueError:
                     args = {}
                 result = await boomi_account_tools.run(tc.function.name, args)
+                if tc.function.name == "draft_integration" and isinstance(result, dict) and result.get("draftId"):
+                    draft_id = result["draftId"]
                 messages.append({"role": "tool", "tool_call_id": tc.id, "content": tool_result_text(result)})
         if not raw_text:
             raw_text = "I looked up your Boomi account but could not put a complete answer together. Please try asking again."
@@ -201,7 +205,9 @@ OUTPUT CONVENTIONS:
             sender="companion",
             text=raw_text,
             timestamp=now_time,
-            suggestedAction=suggested_action,
+            suggestedAction=(
+                SuggestedAction(type="OPEN_DRAFT", label="Review the draft in ArchForge", executionId=draft_id) if draft_id else suggested_action
+            ),
             codeBlock=code_block
         )
 

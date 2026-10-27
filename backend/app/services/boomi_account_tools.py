@@ -67,6 +67,39 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
         }},
     }},
     {"type": "function", "function": {
+        "name": "draft_integration",
+        "description": (
+            "Turns the user's plain-language description of an integration into a DRAFT blueprint in ArchForge. It never builds anything in Boomi: "
+            "the user reviews the draft and builds it themselves. Pass everything the user said about trigger, source, steps and destination. "
+            "Returns status drafted (with shapes, assumptions and which shapes need manual configuration) or needs_more_info (with questions to ask)."
+        ),
+        "parameters": {"type": "object", "properties": {
+            "description": {"type": "string", "description": "The integration the user wants, in their words plus any detail from the conversation."},
+        }, "required": ["description"]},
+    }},
+    {"type": "function", "function": {
+        "name": "get_similar_incidents",
+        "description": (
+            "Incident memory: earlier failures the investigator diagnosed, matched by process name and/or error text, "
+            "with what fixed them and whether the process recovered. Use for 'has this happened before' and 'what fixed it last time'."
+        ),
+        "parameters": {"type": "object", "properties": {
+            "process_name": {"type": "string", "description": "Process name to look up."},
+            "error_text": {"type": "string", "description": "Error message text to match."},
+        }},
+    }},
+    {"type": "function", "function": {
+        "name": "get_process_executions",
+        "description": (
+            "Recent execution history of one process (status, time, error message). Use it to tell whether a failure is new, "
+            "intermittent or constant, and when it started."
+        ),
+        "parameters": {"type": "object", "properties": {
+            "process_name": {"type": "string", "description": "Process name."},
+            "limit": {"type": "integer", "description": "How many recent executions (default 20, max 50)."},
+        }, "required": ["process_name"]},
+    }},
+    {"type": "function", "function": {
         "name": "get_component_revisions",
         "description": (
             "Revision history of one component (process, connection, map ...): every saved version with who saved it and when, "
@@ -250,6 +283,36 @@ class BoomiAccountTools:
             ],
         }
 
+    async def draft_integration(self, description: str) -> Dict[str, Any]:
+        from . import process_designer
+        from .companion_ai import companion_ai_service
+
+        return await process_designer.design_and_save(description, companion_ai_service._openai_client)
+
+    async def get_similar_incidents(self, process_name: Optional[str] = None, error_text: Optional[str] = None) -> Dict[str, Any]:
+        from . import incident_memory
+
+        found = incident_memory.similar(None, process_name, error_text, 5)
+        return {"matches": found, "note": "Past causes are hints, not proof." if found else "No similar incident is in memory."}
+
+    async def get_process_executions(self, process_name: str, limit: Optional[int] = None) -> Dict[str, Any]:
+        limit = _clip(limit, 20, 50)
+        recs = await self._query("ExecutionRecord", [
+            {"argument": [process_name], "operator": "EQUALS", "property": "processName"},
+        ])
+        recs.sort(key=lambda r: r.get("executionTime", ""), reverse=True)
+        counts = Counter(r.get("status") for r in recs)
+        return {
+            "process": process_name,
+            "totalOnRecord": len(recs),
+            "statusCounts": dict(counts),
+            "recent": [
+                {"time": r.get("executionTime"), "status": r.get("status"), "message": (r.get("message") or "")[:140],
+                 "atom": r.get("atomName"), "durationMs": r.get("executionDuration")}
+                for r in recs[:limit]
+            ],
+        }
+
     async def get_component_revisions(
         self, component: str, from_version: Optional[int] = None, to_version: Optional[int] = None
     ) -> Dict[str, Any]:
@@ -312,6 +375,9 @@ class BoomiAccountTools:
             "get_deployments": self.get_deployments,
             "get_components": self.get_components,
             "get_component_revisions": self.get_component_revisions,
+            "get_process_executions": self.get_process_executions,
+            "get_similar_incidents": self.get_similar_incidents,
+            "draft_integration": self.draft_integration,
         }
         handler = handlers.get(name)
         if not handler:

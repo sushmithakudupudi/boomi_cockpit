@@ -89,6 +89,70 @@ export const api = {
     }
   },
 
+  // Failure investigator: read a saved diagnosis (null when none yet) or start one (it only reads data)
+  async getInvestigation(executionId: string): Promise<Record<string, any> | null> {
+    try {
+      const res = await fetch(`${BASE_URL}/investigations/${encodeURIComponent(executionId)}`);
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  },
+
+  async runInvestigation(executionId: string, force = false): Promise<Record<string, any>> {
+    const res = await fetch(`${BASE_URL}/investigations/${encodeURIComponent(executionId)}/run${force ? '?force=true' : ''}`, { method: 'POST' });
+    if (!res.ok) {
+      const detail = await res.json().then((j) => j.detail).catch(() => '');
+      throw new Error(typeof detail === 'string' && detail ? detail : `Could not start the investigation (HTTP ${res.status}).`);
+    }
+    return await res.json();
+  },
+
+  // Actions the AI agent proposed. Nothing runs until a person approves one.
+  async listActions(executionId: string): Promise<Record<string, any>[]> {
+    try {
+      const res = await fetch(`${BASE_URL}/actions?executionId=${encodeURIComponent(executionId)}`);
+      return res.ok ? await res.json() : [];
+    } catch {
+      return [];
+    }
+  },
+
+  async decideAction(actionId: string, decision: 'approve' | 'reject'): Promise<Record<string, any>> {
+    const res = await fetch(`${BASE_URL}/actions/${encodeURIComponent(actionId)}/${decision}`, { method: 'POST' });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      const d = body.detail;
+      throw new Error(typeof d === 'string' ? d : d?.message || `Could not ${decision} the action (HTTP ${res.status}).`);
+    }
+    return await res.json();
+  },
+
+  // Incident memory: the remembered incident for a failure (with similar earlier ones), and recording what fixed it
+  async getIncident(executionId: string): Promise<Record<string, any> | null> {
+    try {
+      const res = await fetch(`${BASE_URL}/incidents/${encodeURIComponent(executionId)}`);
+      return res.ok ? await res.json() : null;
+    } catch {
+      return null;
+    }
+  },
+
+  async recordFix(executionId: string, note: string): Promise<Record<string, any>> {
+    const res = await fetch(`${BASE_URL}/incidents/${encodeURIComponent(executionId)}/resolve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      const d = body.detail;
+      throw new Error(typeof d === 'string' ? d : d?.message || `Could not save (HTTP ${res.status}).`);
+    }
+    return await res.json();
+  },
+
   // 2. Fetch Single Execution Detail
   async fetchExecutionById(id: string): Promise<ExecutionRecord | null> {
     try {

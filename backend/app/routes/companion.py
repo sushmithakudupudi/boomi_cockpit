@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from ..models.schemas import (
     ChatRequest,
     ChatResponse,
@@ -13,6 +13,8 @@ from ..models.schemas import (
 )
 from ..services.companion_ai import companion_ai_service
 from ..services.boomi_service import boomi_service
+from . import auth as auth_routes
+from .actions import APPROVER_ROLES
 
 router = APIRouter(prefix="/companion", tags=["Boomi Companion AI"])
 
@@ -47,7 +49,7 @@ async def build_boomi_process(req: BuildProcessRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/build-blueprint", response_model=BuildBlueprintResponse)
-async def build_blueprint_process(req: BuildBlueprintRequest):
+async def build_blueprint_process(req: BuildBlueprintRequest, user=Depends(auth_routes.current_user)):
     """
     Creates a Boomi process whose shapes follow the Architecture Compiler canvas.
     With dryRun=true it only returns the shape plan and writes nothing to Boomi.
@@ -61,6 +63,9 @@ async def build_blueprint_process(req: BuildBlueprintRequest):
     ]
     if req.dryRun:
         return BuildBlueprintResponse(dryRun=True, shapes=shapes)
+    # Previewing is open to everyone signed in; creating components in Boomi needs an administrator or operator
+    if user.role.name not in APPROVER_ROLES:
+        raise HTTPException(status_code=403, detail="Only administrators and operators can create processes in Boomi.")
     try:
         result = await boomi_service.create_process_from_blueprint(
             name=req.processName,
