@@ -23,6 +23,9 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
+const READ_FAILURES_KEY = 'boomiops.readFailureIds';
+const EXECUTION_POLL_MS = 30000;
+
 const newBlueprintId = () => `bp-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
 export function App() {
@@ -34,6 +37,16 @@ export function App() {
   const [activeTab, setActiveTab] = useState<HealingTab>('cockpit');
   const activePlaceholder = PLACEHOLDER_MODULES.find(m => m.id === activeModule);
   const [executions, setExecutions] = useState<ExecutionRecord[]>([]);
+  // Failures the user has already seen in the bell. null until the first load sets a baseline,
+  // so failures that existed before today do not all show up as new.
+  const [readFailureIds, setReadFailureIds] = useState<Set<string> | null>(() => {
+    try {
+      const raw = localStorage.getItem(READ_FAILURES_KEY);
+      return raw ? new Set<string>(JSON.parse(raw)) : null;
+    } catch {
+      return null;
+    }
+  });
   const [selectedExecution, setSelectedExecution] = useState<ExecutionRecord | null>(null);
   const [isCompanionOpen, setIsCompanionOpen] = useState(false);
   // A question to send to the Companion as soon as the drawer opens (e.g. "What changed?" on an incident)
@@ -167,6 +180,41 @@ export function App() {
     };
   }, []);
 
+  // Keep executions live: pull fresh data from Boomi every 30s while the page is visible
+  useEffect(() => {
+    let mounted = true;
+    const refresh = async () => {
+      if (document.hidden) return;
+      const data = await api.fetchExecutionsLive(true);
+      if (!mounted || !data) return;
+      setExecutions((prev) => (JSON.stringify(prev) === JSON.stringify(data) ? prev : data));
+    };
+    const timer = setInterval(refresh, EXECUTION_POLL_MS);
+    const onVisible = () => { if (!document.hidden) refresh(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      mounted = false;
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, []);
+
+  // A clicked browser notification opens the Companion: new window via ?openCompanion=1, open tab via a message
+  useEffect(() => {
+    const openCompanion = () => {
+      setActiveModule('healing');
+      setActiveTab('cockpit');
+      setIsCompanionOpen(true);
+    };
+    if (new URLSearchParams(window.location.search).has('openCompanion')) {
+      openCompanion();
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+    const onMessage = (e: MessageEvent) => { if (e.data?.type === 'open-companion') openCompanion(); };
+    navigator.serviceWorker?.addEventListener('message', onMessage);
+    return () => navigator.serviceWorker?.removeEventListener('message', onMessage);
+  }, []);
+
   // Reprocess document via Boomi AtomSphere API
   const handleAutoHeal = async (execId: string) => {
     try {
@@ -236,6 +284,39 @@ export function App() {
   const lastFailure = executions
     .filter(e => e.status === 'ERROR' || e.errorMessage)
     .sort((a, b) => (b.startedAt || '').localeCompare(a.startedAt || ''))[0];
+  // Open failures, newest first, for the bell
+  const openFailures = executions
+    .filter(e => e.status === 'ERROR' && !e.reprocessed)
+    .sort((a, b) => (b.startedAt || '').localeCompare(a.startedAt || ''));
+
+  const persistRead = (ids: Set<string>) => {
+    setReadFailureIds(ids);
+    try { localStorage.setItem(READ_FAILURES_KEY, JSON.stringify([...ids].slice(-500))); } catch { /* storage unavailable */ }
+  };
+
+  // First load: everything already failing counts as seen, so only new failures raise the bell
+  useEffect(() => {
+    if (readFailureIds === null && executions.length > 0) {
+      persistRead(new Set(openFailures.map(f => f.id)));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [executions, readFailureIds]);
+
+  const unreadFailureIds = new Set(
+    openFailures.filter(f => readFailureIds !== null && !readFailureIds.has(f.id)).map(f => f.id)
+  );
+
+  const handleMarkAllRead = () => persistRead(new Set([...(readFailureIds || []), ...openFailures.map(f => f.id)]));
+
+  const handleOpenFailure = (exec: ExecutionRecord) => {
+    persistRead(new Set([...(readFailureIds || []), exec.id]));
+    setActiveModule('healing');
+    setActiveTab('cockpit');
+    setSelectedProcessId(exec.processId);
+    setSelectedProcessName(exec.processName);
+    setSelectedExecution(exec);
+  };
+
   const failedCount = executions.filter(e => e.status === 'ERROR' && !e.reprocessed).length;
   const autoHealedCount = executions.filter(e => e.reprocessed).length + (isReprocessed ? 1 : 0);
 
@@ -278,6 +359,10 @@ export function App() {
         isBackendConnected={isBackendConnected}
         atom={atoms[0]}
         onRefresh={handleResetDemo}
+        failures={openFailures}
+        unreadFailureIds={unreadFailureIds}
+        onOpenFailure={handleOpenFailure}
+        onMarkAllRead={handleMarkAllRead}
         sectionLabel={
           activeModule === 'compiler' ? 'ConnectCraft'
             : activeModule === 'revisions' ? 'Revision History'

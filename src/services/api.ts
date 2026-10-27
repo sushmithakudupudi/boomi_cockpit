@@ -66,14 +66,26 @@ export const api = {
   },
 
   // 1. Fetch Executions
-  async fetchExecutions(): Promise<ExecutionRecord[]> {
+  // refresh=true makes the backend pull fresh records from Boomi first (throttled server-side)
+  async fetchExecutions(refresh = false): Promise<ExecutionRecord[]> {
     try {
-      const res = await fetch(`${BASE_URL}/executions`);
+      const res = await fetch(`${BASE_URL}/executions${refresh ? '?refresh=true' : ''}`);
       if (!res.ok) throw new Error(`HTTP error ${res.status}`);
       return await res.json();
     } catch (err) {
       console.warn('Backend /api/executions unreachable, falling back to mock data:', err);
       return mockExecutions;
+    }
+  },
+
+  // Live executions only: null when the backend is unreachable (never mock data), so polling can skip a failed tick
+  async fetchExecutionsLive(refresh = true): Promise<ExecutionRecord[] | null> {
+    try {
+      const res = await fetch(`${BASE_URL}/executions${refresh ? '?refresh=true' : ''}`);
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
     }
   },
 

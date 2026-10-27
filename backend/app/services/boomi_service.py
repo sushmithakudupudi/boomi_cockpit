@@ -17,6 +17,8 @@ class BoomiService:
         self._reprocessed_count: int = 0
         self._boomi_connected: bool = False
         self._rerun_times: Dict[str, float] = {}
+        self._last_sync: float = 0.0
+        self._sync_lock = asyncio.Lock()
 
     def _get_boomi_auth(self) -> Optional[tuple]:
         """Builds HTTP Basic Auth credentials for Dell Boomi AtomSphere REST API."""
@@ -28,6 +30,16 @@ class BoomiService:
         else:
             auth_user = username or f"BOOMI_TOKEN.{settings.BOOMI_ACCOUNT_ID}"
         return (auth_user, settings.BOOMI_API_TOKEN.strip())
+
+    async def refresh_executions_if_stale(self, max_age_seconds: float = 25.0) -> None:
+        """Pulls fresh executions from Boomi, at most once per max_age_seconds, however many callers ask."""
+        if time.time() - self._last_sync < max_age_seconds:
+            return
+        async with self._sync_lock:
+            if time.time() - self._last_sync < max_age_seconds:
+                return  # another caller refreshed while we waited
+            self._last_sync = time.time()  # also throttles retries after a failed sync
+            await self.sync_from_boomi_platform()
 
     async def sync_from_boomi_platform(self) -> bool:
         """
@@ -195,7 +207,14 @@ class BoomiService:
                     })
 
                 if real_execs:
+                    # Keep executions whose reprocess Boomi accepted marked as such across refreshes
+                    reprocessed_ids = {e["id"] for e in self._executions if e.get("reprocessed")}
+                    for e in real_execs:
+                        if e["id"] in reprocessed_ids:
+                            e.update(status="SUCCESS", reprocessed=True, errorMessage=None,
+                                     outboundDocs=max(1, e.get("inboundDocs", 1)))
                     self._executions = real_execs
+                    self._last_sync = time.time()
                     self._boomi_connected = True
                     logger.info(f"Synced {len(real_execs)} real execution records from Boomi AtomSphere API (latest: {real_execs[0]['startedAt']} - {real_execs[0]['processName']}).")
 

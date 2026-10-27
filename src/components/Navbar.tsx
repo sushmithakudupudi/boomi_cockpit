@@ -3,13 +3,13 @@ import {
   Bot, 
   Server, 
   ChevronRight,
-  Bell, 
   Search, 
   RefreshCw,
   Cpu,
   Wand2
 } from 'lucide-react';
-import type { AtomHealth } from '../types/boomi';
+import type { AtomHealth, ExecutionRecord } from '../types/boomi';
+import { AlertsBell } from './AlertsBell';
 import { mockAtoms } from '../data/mockData';
 
 interface NavbarProps {
@@ -22,6 +22,10 @@ interface NavbarProps {
   pageLabel: string;
   activeModule?: string;
   onSelectModule?: (mod: 'healing' | 'compiler') => void;
+  failures?: ExecutionRecord[];
+  unreadFailureIds?: Set<string>;
+  onOpenFailure?: (exec: ExecutionRecord) => void;
+  onMarkAllRead?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -34,6 +38,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   pageLabel,
   activeModule,
   onSelectModule,
+  failures = [],
+  unreadFailureIds = new Set<string>(),
+  onOpenFailure = () => {},
+  onMarkAllRead = () => {},
 }) => {
   const currentAtom = atom || mockAtoms[0];
   const isOnline = currentAtom.status === 'ONLINE';
@@ -97,13 +105,12 @@ export const Navbar: React.FC<NavbarProps> = ({
             <RefreshCw className="w-4 h-4" />
           </button>
 
-          <button 
-            title="Alerts"
-            className="relative p-2 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition"
-          >
-            <Bell className="w-4 h-4" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500" />
-          </button>
+          <AlertsBell
+            failures={failures}
+            unreadIds={unreadFailureIds}
+            onOpenFailure={onOpenFailure}
+            onMarkAllRead={onMarkAllRead}
+          />
 
           {/* ConnectCraft Toggle Button */}
           {onSelectModule && (

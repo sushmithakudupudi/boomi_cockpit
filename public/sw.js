@@ -15,18 +15,22 @@ self.addEventListener('push', (event) => {
       body: data.body || '',
       tag: data.tag || 'boomi-failure', // same tag replaces the previous alert instead of stacking
       icon: '/favicon.svg',
-      data: { url: data.url || '/' },
+      data: { url: data.url || '/?openCompanion=1' },
     })
   );
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = (event.notification.data && event.notification.data.url) || '/';
+  const url = (event.notification.data && event.notification.data.url) || '/?openCompanion=1';
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
       for (const client of clients) {
-        if ('focus' in client) return client.focus();
+        if ('focus' in client) {
+          // An open tab opens the bell/Companion itself; no reload needed
+          client.postMessage({ type: 'open-companion' });
+          return client.focus();
+        }
       }
       return self.clients.openWindow(url);
     })

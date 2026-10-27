@@ -6,16 +6,19 @@ from ..services.boomi_service import boomi_service
 router = APIRouter(prefix="/executions", tags=["Executions"])
 
 @router.get("", response_model=List[ExecutionRecord])
-def list_executions(
+async def list_executions(
     status: Optional[str] = Query(None, description="Filter by status (SUCCESS, ERROR, WARNING, IN_PROGRESS)"),
     environment: Optional[str] = Query(None, description="Filter by environment (Production, Staging, Test)"),
     atom_name: Optional[str] = Query(None, description="Filter by Atom name"),
     search: Optional[str] = Query(None, description="Search keyword in ID, Process, or Error"),
-    limit: int = Query(50, ge=1, le=200, description="Max number of records to return")
+    limit: int = Query(50, ge=1, le=200, description="Max number of records to return"),
+    refresh: bool = Query(False, description="Pull fresh records from Boomi first (throttled to once every ~25s)"),
 ):
     """
     Fetches process execution records from the Boomi AtomSphere Process Reporting API.
     """
+    if refresh:
+        await boomi_service.refresh_executions_if_stale()
     records = boomi_service.get_executions(
         status=status,
         environment=environment,

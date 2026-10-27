@@ -123,7 +123,7 @@ def _send_one(sub: Dict[str, Any], payload: str) -> str:
 async def send_to_all(title: str, body: str, tag: str = "boomi-failure") -> Dict[str, int]:
     _ensure_vapid()
     subs = list_subscriptions()
-    payload = json.dumps({"title": title, "body": body, "tag": tag, "url": "/"})
+    payload = json.dumps({"title": title, "body": body, "tag": tag, "url": "/?openCompanion=1"})
     results = await asyncio.gather(*(asyncio.to_thread(_send_one, s, payload) for s in subs)) if subs else []
     for sub, outcome in zip(subs, results):
         if outcome == "gone":

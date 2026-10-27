@@ -43,26 +43,38 @@ export const BoomiCompanionDrawer: React.FC<BoomiCompanionDrawerProps> = ({
   const announcedRef = useRef<Set<string>>(new Set());
   const activeFailure = executions.find(e => e.status === 'ERROR' && !e.reprocessed);
 
+  // The first load announces only the top open failure; later ones announce every new failure (max 3, then a summary)
+  const firstPassRef = useRef(true);
+
   useEffect(() => {
-    if (!activeFailure || announcedRef.current.has(activeFailure.id)) return;
-    announcedRef.current.add(activeFailure.id);
+    if (executions.length === 0) return;
+    const openFailures = executions
+      .filter(e => e.status === 'ERROR' && !e.reprocessed)
+      .sort((x, y) => (y.startedAt || '').localeCompare(x.startedAt || ''));
+    const fresh = openFailures.filter(f => !announcedRef.current.has(f.id));
+    const isFirst = firstPassRef.current;
+    firstPassRef.current = false;
+    if (fresh.length === 0) return;
+    fresh.forEach(f => announcedRef.current.add(f.id));
+
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     // errorShapeName is a backend guess from the process name, so it is not shown here
-    const reason = activeFailure.errorMessage ? `\n\n${activeFailure.errorMessage.slice(0, 220)}` : '';
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: `alert-${activeFailure.id}`,
-        sender: 'companion',
-        text: `🚨 I detected a failure in \`${activeFailure.processName}\` on ${activeFailure.atomName}.${reason}`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        suggestedAction: {
-          type: 'INSPECT_PAYLOAD',
-          label: `Triage ${activeFailure.processName}`,
-          executionId: activeFailure.id,
-        },
-      },
-    ]);
-  }, [activeFailure]);
+    const toMessage = (f: ExecutionRecord): CompanionMessage => ({
+      id: `alert-${f.id}`,
+      sender: 'companion',
+      text: `🚨 I detected a failure in \`${f.processName}\` on ${f.atomName}.${f.errorMessage ? `
+
+${f.errorMessage.slice(0, 220)}` : ''}`,
+      timestamp: time,
+      suggestedAction: { type: 'INSPECT_PAYLOAD', label: `Triage ${f.processName}`, executionId: f.id },
+    });
+
+    const shown = isFirst ? fresh.slice(0, 1) : fresh.slice(0, 3);
+    const extra: CompanionMessage[] = !isFirst && fresh.length > 3
+      ? [{ id: `alert-more-${fresh[0].id}`, sender: 'companion', text: `…and ${fresh.length - 3} more new failures. Open the bell icon to see them all.`, timestamp: time }]
+      : [];
+    setMessages((prev) => [...prev, ...shown.map(toMessage), ...extra]);
+  }, [executions]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
