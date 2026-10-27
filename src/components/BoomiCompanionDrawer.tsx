@@ -4,14 +4,80 @@ import {
   Bot, 
   Send, 
   Zap, 
-  ChevronRight,
-  FileText,
-  FileType,
-  Loader2
+  ChevronRight
 } from 'lucide-react';
-import type { CompanionMessage, ExecutionRecord, ProcessDocRef } from '../types/boomi';
-import { api, ApiError } from '../services/api';
+import type { CompanionMessage, ExecutionRecord } from '../types/boomi';
+import { api } from '../services/api';
 import { MarkdownText } from './MarkdownText';
+import { CATALOG_GROUPS, categorize } from '../services/shapeCatalog';
+
+type PreparedBlueprint = {
+  processName: string;
+  description: string;
+  stages: Stage[];
+  enhancements: string[];
+  missingInfo: string[];
+};
+type BlueprintBuildPreview = Awaited<ReturnType<typeof api.buildBlueprint>>;
+type CompanionBuildProposal = {
+  proposal: PreparedBlueprint;
+  preview?: BlueprintBuildPreview;
+  result?: BlueprintBuildPreview;
+  error?: string;
+  busy?: boolean;
+};
+
+// Parse only the generated blueprint structure locally; ordinary chat continues through the AI endpoint.
+const parseGeneratedBlueprintPrompt = (prompt: string): PreparedBlueprint => {
+  const blueprintMatch = prompt.match(/## Integration Blueprint \(ID:\s*([^\)]+)\)([\s\S]*?)(?=\nUse each quoted name|\n## |$)/);
+  const block = blueprintMatch?.[2] || '';
+  const rows = [...block.matchAll(/^\s*\d+\.\s+"([^"]+)"\s+\[([^\]]+)\]([^\r\n]*)$/gm)];
+  const catalog = new Set(CATALOG_GROUPS.flatMap((group) => group.entries.map((entry) => entry.id)));
+  const missingInfo: string[] = [];
+  const rawStages: Stage[] = [];
+
+  rows.slice(0, 30).forEach((row, index) => {
+    const [, label, shape, noteTail] = row;
+    if (!catalog.has(shape.trim())) {
+      missingInfo.push(`Unsupported canvas shape: ${shape.trim()}.`);
+      return;
+    }
+    const notes = noteTail.trim().replace(/^(?:[—–-]|â€”|Ã¢â‚¬â€�)\s*/, '').trim();
+    rawStages.push({
+      id: `companion-stage-${index + 1}`,
+      stepNumber: `STEP ${String(index + 1).padStart(2, '0')}`,
+      category: 'MIDDLEWARE / SKILL',
+      label: label.slice(0, 60),
+      selectedShapeOrConnector: shape.trim(),
+      notes: notes || undefined,
+    });
+  });
+
+  const stages = categorize(rawStages);
+  if (!blueprintMatch) missingInfo.push('Could not find a structured Integration Blueprint section. Paste the generated ConnectCraft blueprint prompt.');
+  if (stages.length < 2) missingInfo.push('At least two recognized stages are required to prepare the Boomi process.');
+  const startKinds = new Set(CATALOG_GROUPS.find((group) => group.group === 'Start')?.entries.map((entry) => entry.id) || []);
+  const endKinds = new Set(CATALOG_GROUPS.find((group) => group.group === 'End')?.entries.map((entry) => entry.id) || []);
+  if (stages.length && !startKinds.has(stages[0].selectedShapeOrConnector)) missingInfo.push('Confirm a recognized start shape for the process.');
+  if (stages.length && !endKinds.has(stages[stages.length - 1].selectedShapeOrConnector) && stages[stages.length - 1].category !== 'DESTINATION') missingInfo.push('Confirm the process destination or ending shape.');
+
+  const enhancements: string[] = [];
+  if (stages.length && !stages.some((stage) => stage.selectedShapeOrConnector === 'Try/Catch & Set Properties') && !prompt.includes('Try/Catch:')) {
+    enhancements.push('Consider adding a Try/Catch boundary with a defined recovery or dead-letter path for connector and transformation failures.');
+  }
+  if (stages.some((stage) => stage.category === 'DESTINATION') && !prompt.includes('Prevent duplicates.')) {
+    enhancements.push('Confirm whether destination writes need an idempotency key so retries cannot create duplicate records.');
+  }
+
+  const blueprintId = blueprintMatch?.[1].trim() || '';
+  return {
+    processName: blueprintId ? `Companion_${blueprintId.replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '')}` : 'Companion_Integration',
+    description: 'Prepared from the numbered Integration Blueprint stages. Verify placeholders and configuration before creating it.',
+    stages,
+    enhancements,
+    missingInfo,
+  };
+};
 
 interface BoomiCompanionDrawerProps {
   isOpen: boolean;
@@ -87,63 +153,6 @@ ${f.errorMessage.slice(0, 220)}` : ''}`,
   }, [executions]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [downloading, setDownloading] = useState<string | null>(null);
-
-  // "AI Docs" from Revision History: summarize that revision, then offer the detailed Word/PDF
-  const handledDocRef = useRef<number | null>(null);
-  useEffect(() => {
-    if (!docRequest || handledDocRef.current === docRequest.requestId) return;
-    handledDocRef.current = docRequest.requestId;
-    const { requestId, ...ref } = docRequest;
-    setMessages((prev) => [
-      ...prev,
-      { id: `usr-doc-${requestId}`, sender: 'user', text: `Summarize v${ref.version} of ${ref.processName}`, timestamp: nowLabel() },
-    ]);
-    setIsTyping(true);
-    api
-      .generateProcessDoc(ref.source, ref.componentId, ref.version)
-      .then((doc) => {
-        // Only processes have a flow; other components get their type instead
-        const detail = doc.steps.length
-          ? `**Flow:** ${doc.steps.map((s) => s.label).join(' → ')}`
-          : `**Type:** ${doc.componentType}`;
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `doc-${requestId}`,
-            sender: 'companion',
-            text:
-              `## ${doc.processName} · v${doc.version}\n\n${doc.summary}\n\n${detail}\n\n` +
-              (doc.steps.length
-                ? 'Need more detail? Download the full documentation with every step, referenced component and error-handling note.'
-                : 'Need more detail? Download the full documentation with its configuration and referenced components.'),
-            timestamp: nowLabel(),
-            processDoc: ref,
-          },
-        ]);
-      })
-      .catch((e: ApiError) => {
-        setMessages((prev) => [
-          ...prev,
-          { id: `doc-err-${requestId}`, sender: 'companion', text: `I could not document v${ref.version} of ${ref.processName}: ${e.message}`, timestamp: nowLabel() },
-        ]);
-      })
-      .finally(() => setIsTyping(false));
-  }, [docRequest]);
-
-  const downloadDoc = async (msgId: string, ref: ProcessDocRef, format: 'docx' | 'pdf') => {
-    setDownloading(`${msgId}-${format}`);
-    try {
-      await api.downloadProcessDoc(ref.source, ref.componentId, ref.version, format);
-    } catch (e) {
-      setMessages((prev) => [
-        ...prev,
-        { id: `dl-err-${Date.now()}`, sender: 'companion', text: `Download failed: ${(e as ApiError).message}`, timestamp: nowLabel() },
-      ]);
-    } finally {
-      setDownloading(null);
-    }
-  };
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -172,6 +181,8 @@ ${f.errorMessage.slice(0, 220)}` : ''}`,
   const handleSendMessage = async (textToSend?: string) => {
     const query = (textToSend || inputValue).trim();
     if (!query) return;
+    const isBlueprintPrompt = /##\s+Integration Blueprint\s*\(ID:/i.test(query)
+      && /^\s*1\.\s+"[^"]+"\s+\[[^\]]+\]/m.test(query);
 
     const userMsg: CompanionMessage = {
       id: `usr-${Date.now()}`,
@@ -183,11 +194,22 @@ ${f.errorMessage.slice(0, 220)}` : ''}`,
     setMessages((prev) => [...prev, userMsg]);
     setInputValue('');
     setIsTyping(true);
+    if (isBlueprintPrompt) setBuildProposal(null);
 
     try {
-      // Call FastAPI Boomi Companion Engine
-      const companionReply = await api.askCompanionChat(query);
-      setMessages((prev) => [...prev, companionReply]);
+      if (isBlueprintPrompt) {
+        await prepareBlueprintForReview(query);
+        setMessages((prev) => [...prev, {
+          id: `comp-plan-${Date.now()}`,
+          sender: 'companion',
+          text: 'I prepared a Boomi dry-run from the generated blueprint. Review the stages, suggested enhancements, and any placeholders below. Nothing is created until you approve it.',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        }]);
+      } else {
+        // Call FastAPI Boomi Companion Engine
+        const companionReply = await api.askCompanionChat(query);
+        setMessages((prev) => [...prev, companionReply]);
+      }
     } catch {
       // Fallback
       setMessages((prev) => [
@@ -201,6 +223,37 @@ ${f.errorMessage.slice(0, 220)}` : ''}`,
       ]);
     } finally {
       setIsTyping(false);
+    }
+  };
+
+  const prepareBlueprintForReview = async (prompt: string) => {
+    try {
+      const proposal = parseGeneratedBlueprintPrompt(prompt);
+      const preview = proposal.stages.length >= 2
+        ? await api.buildBlueprint({ processName: proposal.processName, stages: proposal.stages, description: proposal.description, dryRun: true })
+        : undefined;
+      setBuildProposal({ proposal, preview });
+    } catch (error) {
+      setBuildProposal({
+        proposal: { processName: '', description: '', stages: [], enhancements: [], missingInfo: [] },
+        error: error instanceof Error ? error.message : 'Could not prepare the Boomi preview.',
+      });
+    }
+  };
+
+  const handleCreateProposedBlueprint = async () => {
+    if (!buildProposal?.preview || buildProposal.proposal.missingInfo.length > 0 || buildProposal.proposal.stages.length < 2) return;
+    setBuildProposal((current) => current ? { ...current, busy: true, error: undefined } : current);
+    try {
+      const result = await api.buildBlueprint({
+        processName: buildProposal.proposal.processName,
+        stages: buildProposal.proposal.stages,
+        description: buildProposal.proposal.description,
+        dryRun: false,
+      });
+      setBuildProposal((current) => current ? { ...current, result, busy: false } : current);
+    } catch (error) {
+      setBuildProposal((current) => current ? { ...current, error: error instanceof Error ? error.message : 'Boomi could not create the process.', busy: false } : current);
     }
   };
 
@@ -387,6 +440,20 @@ ${f.errorMessage.slice(0, 220)}` : ''}`,
           </div>
         )}
 
+        {buildProposal && <section className="rounded-2xl border border-purple-500/30 bg-slate-900 p-3.5 text-xs shadow-lg">
+          <div className="flex items-start gap-2">
+            {buildProposal.result ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" /> : buildProposal.error ? <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" /> : <ClipboardList className="mt-0.5 h-4 w-4 shrink-0 text-purple-300" />}
+            <div className="min-w-0 flex-1"><h4 className="font-bold text-white">{buildProposal.result ? 'Boomi process created' : buildProposal.error ? 'Could not prepare or create the process' : 'Review Boomi build proposal'}</h4>{buildProposal.proposal.processName && <p className="mt-1 text-slate-300">{buildProposal.proposal.processName}</p>}</div>
+          </div>
+          {buildProposal.error && <div className="mt-3 rounded-lg border border-rose-500/30 bg-rose-950/30 p-2.5 text-rose-200">{buildProposal.error}</div>}
+          {buildProposal.proposal.missingInfo.length > 0 && <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-950/20 p-2.5"><p className="font-bold text-amber-200">Needs clarification before building</p><ul className="mt-1 list-disc space-y-1 pl-4 text-slate-300">{buildProposal.proposal.missingInfo.map((item, i) => <li key={i}>{item}</li>)}</ul></div>}
+          {buildProposal.proposal.stages.length > 0 && <div className="mt-3 space-y-1.5"><p className="font-bold text-slate-200">Proposed stages</p>{buildProposal.proposal.stages.map((stage, i) => <div key={stage.id} className="rounded-lg border border-slate-800 bg-slate-950/70 p-2"><span className="mr-1.5 font-mono text-purple-300">{String(i + 1).padStart(2, '0')}.</span><span className="font-semibold text-white">{stage.label}</span><span className="text-slate-400"> · {stage.selectedShapeOrConnector}</span>{stage.notes && <p className="mt-1 whitespace-pre-wrap text-[11px] text-slate-400">{stage.notes}</p>}</div>)}</div>}
+          {buildProposal.proposal.enhancements.length > 0 && <div className="mt-3 rounded-lg border border-sky-500/25 bg-sky-950/20 p-2.5"><p className="font-bold text-sky-200">Suggested enhancements</p><ul className="mt-1 list-disc space-y-1 pl-4 text-slate-300">{buildProposal.proposal.enhancements.map((item, i) => <li key={i}>{item}</li>)}</ul></div>}
+          {buildProposal.preview && <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950/60 p-2.5"><p className="font-bold text-slate-200">Boomi dry-run preview</p><ol className="mt-1 list-decimal space-y-1 pl-4 text-slate-300">{buildProposal.preview.shapes.map((shape, i) => <li key={i}>{shape.label} <span className="text-slate-500">({shape.kind})</span>{shape.placeholder && <span className="ml-1 text-amber-300">· placeholder: {shape.reason}</span>}{shape.configure && <span className="ml-1 text-amber-300">· requires configuration</span>}</li>)}</ol>{buildProposal.preview.shapes.some(shape => shape.placeholder || shape.configure) && <p className="mt-2 text-[10px] leading-relaxed text-amber-200/90">Connector operations, profiles, and maps marked as placeholders need configuration in Boomi before the integration can run.</p>}</div>}
+          {buildProposal.result && <div className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-950/20 p-2.5 text-emerald-100"><p>{buildProposal.result.message || 'Boomi accepted the process creation request.'}</p>{buildProposal.result.componentId && <p className="mt-1">Component ID: <code>{buildProposal.result.componentId}</code></p>}{buildProposal.result.folder && <p>Folder: {buildProposal.result.folder}</p>}</div>}
+          {!buildProposal.result && buildProposal.preview && <button onClick={handleCreateProposedBlueprint} disabled={Boolean(buildProposal.busy) || buildProposal.proposal.missingInfo.length > 0} className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-purple-600 px-3 py-2 font-bold text-white hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-50">{buildProposal.busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}{buildProposal.busy ? 'Creating in Boomi…' : 'Confirm and create in Boomi'}</button>}
+        </section>}
+
         <div ref={messagesEndRef} />
       </div>
 
@@ -399,12 +466,12 @@ ${f.errorMessage.slice(0, 220)}` : ''}`,
           }}
           className="relative flex items-center"
         >
-          <input
-            type="text"
+          <textarea
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            placeholder="Ask Companion about any process, shape, or error..."
-            className="w-full pl-3.5 pr-10 py-2.5 text-xs rounded-xl bg-slate-950 border border-slate-700/80 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-boomi-accent focus:ring-1 focus:ring-boomi-accent transition"
+            placeholder="Ask Companion or paste a generated Integration Blueprint..."
+            rows={3}
+            className="w-full resize-y pl-3.5 pr-10 py-2.5 text-xs rounded-xl bg-slate-950 border border-slate-700/80 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-boomi-accent focus:ring-1 focus:ring-boomi-accent transition"
           />
           <button
             type="submit"

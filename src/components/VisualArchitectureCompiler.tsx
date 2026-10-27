@@ -14,7 +14,6 @@ import {
   ChevronDown,
   Sparkles,
   Info,
-  Terminal,
   Bot
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
@@ -22,7 +21,6 @@ import type { Stage, BlueprintConfig } from '../types/compiler';
 import {
   PRESET_BLUEPRINTS,
   createBlankConfig,
-  generateGates,
   generateJobBreakdown,
   generateBoomiCompanionPrompt
 } from '../services/boomiPromptEngine';
@@ -49,8 +47,6 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [isCompiling, setIsCompiling] = useState<boolean>(false);
   const [copiedPrompt, setCopiedPrompt] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'prompt' | 'breakdown'>('prompt');
-  const [expandedGateId, setExpandedGateId] = useState<string | null>(null);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState<boolean>(false);
   
   // Build in Boomi: preview (dry run) first, then create after the user confirms
@@ -188,8 +184,6 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
   // The active prompt displayed in the viewer
   const displayedPrompt = aiGeneratedPrompt || dynamicDomainPrompt;
   const jobBreakdown = useMemo(() => generateJobBreakdown(currentConfig), [currentConfig]);
-  const gates = useMemo(() => generateGates(currentConfig), [currentConfig]);
-  const includedGateCount = gates.filter(g => g.included).length;
   const specGenerated = aiGeneratedPrompt !== null;
 
   // Compile with OpenAI via backend
@@ -803,33 +797,6 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
           </div>
         </div>
 
-        {/* Tab Buttons: Job breakdown vs Companion prompt */}
-        <div className="flex items-center gap-2 border-b border-slate-800 pb-1">
-          <button
-            onClick={() => setActiveTab('prompt')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition cursor-pointer ${
-              activeTab === 'prompt'
-                ? 'bg-purple-600/20 text-purple-300 border border-purple-500/40'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Terminal className="w-3.5 h-3.5" />
-            <span>Companion prompt</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('breakdown')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition cursor-pointer ${
-              activeTab === 'breakdown'
-                ? 'bg-purple-600/20 text-purple-300 border border-purple-500/40'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Layers className="w-3.5 h-3.5" />
-            <span>Job breakdown [{jobBreakdown.length}]</span>
-          </button>
-        </div>
-
         {/* Two-Column Review Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           
@@ -877,44 +844,9 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
                 </button>
               </div>
 
-              {/* View Switch: Prompt View vs Breakdown View */}
-              {activeTab === 'prompt' ? (
-                <div className="relative rounded-xl bg-slate-950 border border-slate-800 p-4 font-mono text-[11px] leading-relaxed text-slate-300 max-h-[520px] overflow-y-auto selection:bg-purple-600 selection:text-white">
-                  <pre className="whitespace-pre-wrap">{displayedPrompt}</pre>
-                </div>
-              ) : (
-                <div className="space-y-3 max-h-[520px] overflow-y-auto pr-1">
-                  {jobBreakdown.map((jb) => (
-                    <div
-                      key={jb.id}
-                      className="rounded-xl bg-slate-950/70 border border-slate-800 p-3.5 space-y-1.5"
-                    >
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold text-purple-300 font-mono text-[11px]">
-                          {jb.name}
-                        </span>
-                        <span className="px-2 py-0.5 rounded bg-slate-800 text-[10px] text-slate-400">
-                          {jb.componentType}
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-slate-400">
-                        Folder: <code className="text-slate-300 bg-slate-900 px-1 py-0.5 rounded">{jb.boomiFolder}</code>
-                      </div>
-                      <p className="text-xs text-slate-300">{jb.purpose}</p>
-                      <div className="flex flex-wrap gap-1.5 pt-1">
-                        {jb.shapesInvolved.map((shape, sIdx) => (
-                          <span
-                            key={sIdx}
-                            className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-[10px] text-slate-400"
-                          >
-                            {shape}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <div className="relative rounded-xl bg-slate-950 border border-slate-800 p-4 font-mono text-[11px] leading-relaxed text-slate-300 max-h-[520px] overflow-y-auto selection:bg-purple-600 selection:text-white">
+                <pre className="whitespace-pre-wrap">{displayedPrompt}</pre>
+              </div>
             </div>
 
             {/* Build in Boomi: preview, confirm, result */}
@@ -1027,123 +959,34 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
             </div>
           </div>
 
-          {/* Right Column: Compiler Status & Blueprint Plan */}
-          <div className="lg:col-span-5 rounded-2xl bg-slate-900/90 border border-slate-800 p-5 shadow-xl flex flex-col justify-between">
-            <div className="space-y-4">
-              
-              {/* Header with READY badge */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-bold text-white">Compiler status</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    {specGenerated ? (promptSource === 'openai' ? 'AI generated plan' : 'Rules engine plan') : 'Live preview plan'}
-                  </p>
-                </div>
-                <span className={`px-2.5 py-0.5 rounded-md text-[11px] font-bold border ${
-                  specGenerated
-                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                    : 'bg-slate-800 text-slate-400 border-slate-700'
-                }`}>
-                  {specGenerated ? 'READY' : 'DRAFT'}
-                </span>
-              </div>
-
-              {/* Metric Cards (PLAN ITEMS, GATES, STAGES) */}
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="rounded-xl bg-slate-950/80 border border-slate-800 p-2.5">
-                  <div className="text-[10px] uppercase font-bold text-slate-500">PLAN ITEMS</div>
-                  <div className="text-lg font-extrabold text-white">{String(jobBreakdown.length).padStart(2, '0')}</div>
-                </div>
-                <div className="rounded-xl bg-slate-950/80 border border-slate-800 p-2.5">
-                  <div className="text-[10px] uppercase font-bold text-slate-500">PLAN STEPS</div>
-                  <div className="text-lg font-extrabold text-purple-300">{includedGateCount}</div>
-                </div>
-                <div className="rounded-xl bg-slate-950/80 border border-slate-800 p-2.5">
-                  <div className="text-[10px] uppercase font-bold text-slate-500">STAGES</div>
-                  <div className="text-lg font-extrabold text-white">
-                    {String(blueprint.stages.length).padStart(2, '0')}
-                  </div>
-                </div>
-              </div>
-
-              {/* Dependency Order Timeline */}
+          {/* Right Column: Job Breakdown */}
+          <div className="lg:col-span-5 rounded-2xl bg-slate-900/90 border border-slate-800 p-5 shadow-xl flex flex-col min-h-0">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-800 pb-3">
               <div>
-                <div className="flex items-center justify-between text-xs font-bold text-slate-400 mb-2">
-                  <span className="tracking-wider uppercase text-[11px]">IMPLEMENTATION PLAN</span>
-                  <span className="text-purple-300 font-mono text-[11px]">{gates.length} PLAN STEPS</span>
-                </div>
-
-                <div className="space-y-1.5 max-h-[380px] overflow-y-auto pr-1">
-                  {gates.map((gate) => {
-                    const isExpanded = expandedGateId === gate.id;
-
-                    return (
-                      <div
-                        key={gate.id}
-                        onClick={() => setExpandedGateId(isExpanded ? null : gate.id)}
-                        className={`p-2 rounded-xl border text-xs transition cursor-pointer ${
-                          !gate.included ? 'opacity-50 ' : ''}${
-                          isExpanded
-                            ? 'bg-purple-950/30 border-purple-500/40'
-                            : 'bg-slate-950/50 border-slate-800/80 hover:border-slate-700'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <span className="w-5 h-5 rounded-md bg-purple-500/20 border border-purple-500/40 text-[10px] font-bold text-purple-300 flex items-center justify-center shrink-0">
-                              {gate.stepNum}
-                            </span>
-                            <span className="font-semibold text-slate-200 truncate text-[11px]">
-                              {gate.title}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <span className="text-[9px] text-slate-500 hidden sm:inline font-mono">
-                              {gate.namespace}
-                            </span>
-                            {gate.included
-                              ? <span className="text-[9px] font-mono text-sky-300 shrink-0">PLANNED</span>
-                              : <span className="text-[9px] font-mono text-slate-500 shrink-0">OFF</span>}
-                          </div>
-                        </div>
-
-                        {/* Expanded details */}
-                        {isExpanded && (
-                          <div className="mt-2 pt-2 border-t border-purple-500/20 text-[11px] text-slate-300 space-y-1 animate-fade-in">
-                            <p>{gate.description}</p>
-                            <div className="flex flex-wrap gap-1 pt-1">
-                              {gate.boomiArtifacts.map((art, aIdx) => (
-                                <span
-                                  key={aIdx}
-                                  className="px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300 text-[10px] border border-purple-500/20"
-                                >
-                                  {art}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                <h3 className="text-sm font-bold text-white">Job breakdown</h3>
+                <p className="mt-0.5 text-xs text-slate-400">Plan items derived from the saved blueprint stages.</p>
               </div>
+              <span className="shrink-0 rounded-md border border-purple-500/30 bg-purple-500/10 px-2 py-1 text-[10px] font-bold text-purple-300">{jobBreakdown.length} ITEMS</span>
             </div>
-
-            {/* Human approval gate Card at bottom */}
-            <div className="mt-4 p-3 rounded-xl bg-purple-950/30 border border-purple-500/30 flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-purple-500/20 text-purple-300 shrink-0">
-                <ShieldCheck className="w-4 h-4" />
-              </div>
-              <div className="min-w-0">
-                <div className="text-xs font-bold text-white">Human approval gate</div>
-                <div className="text-[11px] text-slate-400 leading-tight">
-                  Review all generated specs before creating or deploying platform assets.
-                </div>
-              </div>
+            <div className="mt-3 space-y-2.5 overflow-y-auto pr-1 lg:max-h-[720px]">
+              {jobBreakdown.map((item, index) => (
+                <article key={item.id} className="rounded-xl border border-slate-800 bg-slate-950/70 p-3.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex min-w-0 items-start gap-2">
+                      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-purple-500/40 bg-purple-500/15 text-[10px] font-bold text-purple-300">{String(index + 1).padStart(2, '0')}</span>
+                      <span className="text-xs font-bold text-white">{item.name}</span>
+                    </div>
+                    <span className="shrink-0 rounded bg-slate-800 px-2 py-0.5 text-[9px] text-slate-400">{item.componentType}</span>
+                  </div>
+                  <p className="mt-2 text-[11px] leading-relaxed text-slate-300">{item.purpose}</p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {item.shapesInvolved.map((shape, shapeIndex) => <span key={shapeIndex} className="rounded border border-slate-800 bg-slate-900 px-2 py-0.5 text-[10px] text-slate-400">{shape}</span>)}
+                  </div>
+                  <p className="mt-2 text-[10px] text-slate-500">Folder: {item.boomiFolder}</p>
+                </article>
+              ))}
             </div>
-
+            <p className="mt-3 border-t border-slate-800 pt-3 text-[10px] leading-relaxed text-slate-500">Planning view only. Separate profiles, maps, connections, and supporting components are listed only when specified by the blueprint.</p>
           </div>
         </div>
       </section>
