@@ -88,14 +88,14 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
           <span className="text-[11px] text-rose-400 font-medium">Actionable</span>
         </div>
         <p className="text-[11px] text-slate-400 mt-1">
-          {failedCount > 0 ? 'Ready for Companion Triage' : 'All systems operational'}
+          {failedCount > 0 ? 'Ready for Keystone AI triage' : 'All systems operational'}
         </p>
       </div>
 
       {/* Metric 4: Autonomous Auto-Healed */}
       <div className="p-4 rounded-2xl bg-gradient-to-br from-boomi-card to-sky-950/30 border border-sky-500/30 shadow-lg">
         <div className="flex items-center justify-between text-slate-400 mb-2">
-          <span className="text-xs font-medium text-sky-200">Companion Reprocessed</span>
+          <span className="text-xs font-medium text-sky-200">Keystone AI Reprocessed</span>
           <Zap className="w-4 h-4 text-boomi-accent" />
         </div>
         <div className="flex items-baseline gap-2">

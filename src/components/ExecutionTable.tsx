@@ -206,7 +206,7 @@ export const ExecutionTable: React.FC<ExecutionTableProps> = ({
                           className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gradient-to-r from-boomi-blue to-sky-500 hover:from-blue-600 hover:to-sky-400 text-white font-semibold text-xs shadow-md shadow-sky-950 transition cursor-pointer"
                         >
                           <Bot className="w-3.5 h-3.5" />
-                          <span>Triage with Companion</span>
+                          <span>Triage with Keystone AI</span>
                         </button>
                       ) : (
                         <button

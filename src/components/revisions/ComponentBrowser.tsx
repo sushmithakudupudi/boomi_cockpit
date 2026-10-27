@@ -3,6 +3,8 @@ import { ArrowDownUp, ChevronRight, RefreshCw, Search, SlidersHorizontal, X } fr
 import { api, ApiError } from '../../services/api';
 import type { ComponentFilters, ComponentListResponse, ComponentRevision, RevisionSource } from '../../types/revisions';
 import { Avatar, EmptyState, ErrorState, SkeletonRows, TypeBadge } from './shared';
+import { Select } from '../ui/Select';
+import { DatePicker } from '../ui/DatePicker';
 import { componentTypeLabel, formatDate, inputCls, relativeTime } from './utils';
 
 interface Props {
@@ -88,12 +90,15 @@ export const ComponentBrowser: React.FC<Props> = ({ source, onOpen }) => {
             )}
           </div>
           <div className="flex gap-2">
-            <label className="relative flex-1 sm:flex-none">
-              <ArrowDownUp className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
-              <select value={sort} onChange={(e) => setSort(e.target.value as SortId)} className={`${inputCls} w-full pl-8 py-2.5`} aria-label="Sort components">
-                {SORTS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-              </select>
-            </label>
+            <Select
+              value={sort}
+              onChange={setSort}
+              options={SORTS.map((s) => ({ value: s.id, label: s.label }))}
+              icon={ArrowDownUp}
+              ariaLabel="Sort components"
+              searchable={false}
+              className="flex-1 sm:flex-none sm:w-52"
+            />
             <button
               onClick={() => setShowFilters((v) => !v)}
               aria-expanded={showFilters}
@@ -129,22 +134,16 @@ export const ComponentBrowser: React.FC<Props> = ({ source, onOpen }) => {
         )}
 
         {showFilters && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-3 border-t border-boomi-cardBorder">
-            <label className="text-[10px] uppercase tracking-wider font-bold text-slate-500 space-y-1">
-              <span>Modified by</span>
-              <select value={filters.author} onChange={(e) => set({ author: e.target.value })} className={`${inputCls} w-full normal-case tracking-normal font-normal`}>
-                <option value="">Anyone</option>
-                {facets?.authors.map((a) => <option key={a} value={a}>{a}</option>)}
-              </select>
-            </label>
-            <label className="text-[10px] uppercase tracking-wider font-bold text-slate-500 space-y-1">
-              <span>Modified from</span>
-              <input type="date" value={filters.dateFrom} max={filters.dateTo || undefined} onChange={(e) => set({ dateFrom: e.target.value })} className={`${inputCls} w-full font-normal [color-scheme:dark]`} />
-            </label>
-            <label className="text-[10px] uppercase tracking-wider font-bold text-slate-500 space-y-1">
-              <span>Modified to</span>
-              <input type="date" value={filters.dateTo} min={filters.dateFrom || undefined} onChange={(e) => set({ dateTo: e.target.value })} className={`${inputCls} w-full font-normal [color-scheme:dark]`} />
-            </label>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4 border-t border-boomi-cardBorder">
+            <Select
+              label="Modified by"
+              value={filters.author}
+              onChange={(author) => set({ author })}
+              options={[{ value: '', label: 'Anyone' }, ...(facets?.authors ?? []).map((a) => ({ value: a, label: a }))]}
+              clearValue=""
+            />
+            <DatePicker label="Modified from" value={filters.dateFrom} max={filters.dateTo || undefined} onChange={(dateFrom) => set({ dateFrom })} />
+            <DatePicker label="Modified to" value={filters.dateTo} min={filters.dateFrom || undefined} onChange={(dateTo) => set({ dateTo })} />
           </div>
         )}
       </div>

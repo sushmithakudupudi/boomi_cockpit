@@ -46,6 +46,12 @@ for (const fam of [...NEUTRALS, ...ACCENTS]) {
     lightVars[`--c-${fam}-${s}`] = rgb(colors[fam][map[s]])
   }
 }
+// On solid coloured surfaces (buttons, badges) light text and pale icon tints keep their dark-theme values,
+// otherwise light mode would turn e.g. a text-amber-200 icon on a blue button dark and unreadable.
+const solidVars = { '--c-white': '255 255 255' }
+for (const fam of ACCENTS) {
+  for (const s of [50, 100, 200, 300, 400]) solidVars[`--c-${fam}-${s}`] = rgb(colors[fam][s])
+}
 for (const [k, [d, l]] of Object.entries(BOOMI)) {
   darkVars[`--c-boomi-${k}`] = rgb(d)
   lightVars[`--c-boomi-${k}`] = rgb(l)
@@ -76,6 +82,11 @@ export default {
       screens: {
         xs: '480px',
       },
+      // One typeface family for the whole app (both are loaded in index.html).
+      fontFamily: {
+        sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'Consolas', 'monospace'],
+      },
       animation: {
         'pulse-fast': 'pulse 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'glow': 'glow 2s ease-in-out infinite alternate',
@@ -93,7 +104,7 @@ export default {
       addBase({
         ':root': { ...darkVars, colorScheme: 'dark' },
         'html.light': { ...lightVars, colorScheme: 'light' },
-        [`html.light :is(${solid})`]: { '--c-white': '255 255 255' },
+        [`html.light :is(${solid})`]: solidVars,
       })
     }),
   ],

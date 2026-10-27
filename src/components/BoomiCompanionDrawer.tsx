@@ -118,7 +118,7 @@ export const BoomiCompanionDrawer: React.FC<BoomiCompanionDrawerProps> = ({
     {
       id: 'msg-1',
       sender: 'companion',
-      text: "👋 Hello! I am your Boomi Companion Operations Copilot. I'm actively monitoring your Atoms and Process Executions. How can I assist you?",
+      text: "👋 Hello! I am Keystone AI, your operations copilot. I'm actively monitoring your Atoms and Process Executions. How can I assist you?",
       timestamp: 'Just now',
     }
   ]);
@@ -369,7 +369,8 @@ ${f.errorMessage.slice(0, 220)}` : ''}`,
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-y-0 right-0 z-40 w-full max-w-md bg-boomi-card border-l border-boomi-cardBorder shadow-2xl flex flex-col animate-slide-left">
+    // Opens below the 64px top bar so the bar (and its buttons) never move or get covered.
+    <div className="fixed top-16 bottom-0 right-0 z-40 w-full max-w-md bg-boomi-card border-l border-t border-boomi-cardBorder shadow-2xl flex flex-col animate-slide-left">
       
       {/* Drawer Header */}
       <div className="flex items-center justify-between p-4 border-b border-boomi-cardBorder bg-slate-900/90 backdrop-blur">
@@ -380,7 +381,7 @@ ${f.errorMessage.slice(0, 220)}` : ''}`,
           </div>
           <div>
             <div className="flex items-center gap-1.5">
-              <h3 className="text-sm font-bold text-white">Boomi Companion</h3>
+              <h3 className="text-sm font-bold text-white">Keystone AI</h3>
               <span className="text-[10px] px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-300 font-semibold border border-sky-500/30">
                 AI Copilot
               </span>
@@ -424,7 +425,7 @@ ${f.errorMessage.slice(0, 220)}` : ''}`,
             className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}
           >
             <div className="flex items-center gap-1.5 mb-1 text-[10px] text-slate-500">
-              <span>{msg.sender === 'user' ? 'You' : 'Boomi Companion'}</span>
+              <span>{msg.sender === 'user' ? 'You' : 'Keystone AI'}</span>
               <span>•</span>
               <span>{msg.timestamp}</span>
             </div>
@@ -494,7 +495,7 @@ ${f.errorMessage.slice(0, 220)}` : ''}`,
         {isTyping && (
           <div className="flex items-center gap-2 text-slate-400 text-xs py-2">
             <Bot className="w-4 h-4 text-boomi-accent animate-spin" />
-            <span>Boomi Companion is analyzing Atom telemetry...</span>
+            <span>Keystone AI is analyzing Atom telemetry...</span>
           </div>
         )}
 
@@ -527,7 +528,7 @@ ${f.errorMessage.slice(0, 220)}` : ''}`,
           <textarea
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            placeholder="Ask Companion or paste a generated Integration Blueprint..."
+            placeholder="Ask Keystone AI or paste a generated Integration Blueprint..."
             rows={3}
             className="w-full resize-y pl-3.5 pr-10 py-2.5 text-xs rounded-xl bg-slate-950 border border-slate-700/80 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-boomi-accent focus:ring-1 focus:ring-boomi-accent transition"
           />

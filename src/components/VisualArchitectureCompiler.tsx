@@ -11,8 +11,8 @@ import {
   ArrowRight,
   Download,
   Sliders,
-  ChevronDown,
   Sparkles,
+  Wand2,
   Info,
   Bot
 } from 'lucide-react';
@@ -25,7 +25,14 @@ import {
   generateBoomiCompanionPrompt
 } from '../services/boomiPromptEngine';
 import { api } from '../services/api';
+import { PageHeader } from './PageHeader';
+import { Select, type SelectOption } from './ui/Select';
 import { CATALOG_GROUPS, categorize, kindOf } from '../services/shapeCatalog';
+
+// Shape catalog as grouped dropdown options (built once).
+const SHAPE_OPTIONS: SelectOption[] = CATALOG_GROUPS.flatMap((g) =>
+  g.entries.map((e) => ({ value: e.id, label: e.label, hint: e.tag, group: g.group })),
+);
 
 interface Props {
   /** Backend id of the blueprint being edited; remount (key) to switch blueprints. */
@@ -286,7 +293,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
   const buildRequest = (dryRun: boolean) => ({
     processName: processName.trim() || currentConfig.title.replace(/\s+/g, '_'),
     stages: currentConfig.stages,
-    description: `Built from the Visual Architecture Compiler (${currentConfig.blueprintId})`,
+    description: `Built with ArchForge (${currentConfig.blueprintId})`,
     dryRun,
   });
 
@@ -359,7 +366,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
       JSON.stringify(
         {
           schemaVersion: '1.0',
-          generator: 'BoomiOps Visual Architecture Compiler',
+          generator: 'BoomiOps ArchForge',
           aiModel: promptSource === 'openai' ? aiModelUsed : 'Domain Rules Engine',
           source: promptSource,
           blueprintId: currentConfig.blueprintId,
@@ -386,116 +393,80 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
   return (
     <div className="space-y-6 pb-12 animate-fade-in text-slate-200">
       
-      {/* Top Banner & Header */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 pb-2 border-b border-slate-800">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2 mb-1">
-            <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-purple-500/10 border border-purple-500/30 text-[11px] font-bold tracking-wider uppercase text-purple-300">
-              <Sparkles className="w-3 h-3 text-purple-400" />
-              VISUAL ARCHITECTURE COMPILER
-            </span>
-            <span className="hidden xs:inline text-xs text-slate-500">•</span>
-            <div className="flex items-center gap-1 text-xs text-slate-400 min-w-0 max-w-full">
-              <span>Template:</span>
-              <select
-                value={selectedPresetId}
-                onChange={(e) => handleSelectPreset(e.target.value)}
-                className="min-w-0 max-w-[220px] sm:max-w-xs bg-slate-900 border border-slate-700 rounded-md px-2 py-0.5 text-xs text-purple-300 focus:outline-none focus:border-purple-500 cursor-pointer"
-              >
-                <option value="" className="bg-slate-900 text-slate-200">Custom flow</option>
-                {PRESET_BLUEPRINTS.map(p => (
-                  <option key={p.id} value={p.id} className="bg-slate-900 text-slate-200">
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+      {/* Header: same pattern as the other modules (icon tile, module name, one-line description) */}
+      <PageHeader
+        icon={Wand2}
+        title="ArchForge"
+        description="Describe the flow and generate a dependency-ordered Companion execution spec."
+      />
 
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
-            From whiteboard to <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-fuchsia-400">working blueprint.</span>
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-400 mt-1">
-            Describe the flow. Generate a dependency-ordered Companion execution spec.
-          </p>
+      {/* Blueprint toolbar: name and status, template, reset */}
+      <div className="flex flex-wrap items-center gap-2.5 p-3 rounded-2xl bg-boomi-card border border-boomi-cardBorder">
+        <div className="flex items-center gap-2 min-w-[220px] flex-1 px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 focus-within:border-boomi-accent transition">
+          <span className={`w-2 h-2 rounded-full shrink-0 ${buildResult ? 'bg-emerald-400' : 'bg-boomi-accent animate-pulse'}`} />
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 shrink-0">{buildResult ? 'Sent' : 'Draft'}</span>
+          <input
+            type="text"
+            value={blueprint.title}
+            onChange={(e) => setBlueprint(prev => ({ ...prev, title: e.target.value }))}
+            aria-label="Blueprint name"
+            maxLength={60}
+            className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-white placeholder:text-slate-500 focus:outline-none"
+          />
+          <span className="hidden sm:inline text-[10px] font-mono text-slate-500 shrink-0">{blueprint.blueprintId}</span>
         </div>
 
-        {/* Blueprint ID Badge and Reset */}
-        <div className="flex flex-wrap items-center gap-2.5 w-full xl:w-auto xl:shrink-0">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl min-w-0 flex-1 xl:flex-none bg-slate-900/90 border border-slate-700/80 text-xs font-mono text-slate-300">
-            <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
-            <span className="text-slate-400 font-sans text-[11px]">{buildResult ? 'SENT' : 'DRAFT'}</span>
-            <input
-              type="text"
-              value={blueprint.title}
-              onChange={(e) => setBlueprint(prev => ({ ...prev, title: e.target.value }))}
-              aria-label="Blueprint name"
-              maxLength={60}
-              className="min-w-0 flex-1 xl:flex-none xl:w-44 bg-transparent border-b border-slate-700 focus:border-purple-500 text-purple-300 font-bold font-sans focus:outline-none"
-            />
-            <span className="hidden xs:inline text-slate-500 text-[10px] shrink-0">{blueprint.blueprintId}</span>
-          </div>
+        <Select
+          label="Template"
+          value={selectedPresetId}
+          onChange={handleSelectPreset}
+          options={[{ value: '', label: 'Custom flow' }, ...PRESET_BLUEPRINTS.map((p) => ({ value: p.id, label: p.name }))]}
+          className="w-full sm:w-64"
+        />
 
-          <button
-            onClick={handleReset}
-            title="Reset Blueprint to Default"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-semibold transition cursor-pointer"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Reset</span>
-          </button>
-        </div>
       </div>
 
       {/* Shown for drafts the AI wrote from a chat description: the user reviews before anything is built */}
       {draftMeta.origin === 'ai-designer' && !buildResult && !bannerDismissed && (
-        <div className="rounded-xl bg-purple-950/30 border border-purple-500/40 px-4 py-3 text-xs text-purple-100 space-y-1.5">
+        <div className="rounded-xl bg-sky-950/30 border border-sky-500/40 px-4 py-3 text-xs text-sky-100 space-y-1.5">
           <div className="flex items-start justify-between gap-3">
             <div className="font-bold">Drafted by AI from your description. Review every shape before building.</div>
-            <button onClick={() => setBannerDismissed(true)} className="text-purple-300 hover:text-white cursor-pointer shrink-0" aria-label="Dismiss">Dismiss</button>
+            <button onClick={() => setBannerDismissed(true)} className="text-sky-300 hover:text-white cursor-pointer shrink-0" aria-label="Dismiss">Dismiss</button>
           </div>
-          <p className="text-purple-200/80">Nothing has been created in Boomi. Check the shapes and notes, then use Build in Boomi, which shows the exact shape list and asks you to confirm.</p>
+          <p className="text-sky-200/80">Nothing has been created in Boomi. Check the shapes and notes, then use Build in Boomi, which shows the exact shape list and asks you to confirm.</p>
           {draftMeta.assumptions.length > 0 && (
-            <ul className="list-disc ml-4 text-purple-200/80">
+            <ul className="list-disc ml-4 text-sky-200/80">
               {draftMeta.assumptions.map((a, i) => <li key={i}>Assumption: {a}</li>)}
             </ul>
           )}
         </div>
       )}
 
-      {/* Green Handoff Success Alert Banner */}
-      <div className={`rounded-xl px-4 py-3 flex items-center justify-between shadow-lg border ${
-        specGenerated ? 'bg-emerald-950/40 border-emerald-500/40' : 'bg-slate-900/60 border-slate-700'
-      }`}>
-        <div className={`flex items-center gap-2.5 text-xs font-medium ${specGenerated ? 'text-emerald-300' : 'text-slate-300'}`}>
-          {specGenerated
-            ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-            : <Info className="w-4 h-4 text-slate-400 shrink-0" />}
-          <span>
-            {specGenerated
-              ? 'Companion spec generated. Review it before handing off to Companion.'
-              : 'Live preview from your current blueprint. Click Generate Companion spec to compile it.'}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
+      {/* Shown once a spec has been generated */}
+      {specGenerated && (
+        <div className="rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-2 border bg-emerald-950/40 border-emerald-500/40">
+          <div className="flex items-center gap-2.5 text-xs font-medium text-emerald-300">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>Companion spec generated. Review it before handing off to Companion.</span>
+          </div>
           {promptSource === 'openai' ? (
             <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
               OPENAI ({aiModelUsed})
             </span>
           ) : (
-            <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-300 border border-purple-500/30">
-              {specGenerated ? 'RULES ENGINE SPEC' : 'LIVE PREVIEW'}
+            <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-sky-500/20 text-sky-300 border border-sky-500/30">
+              RULES ENGINE SPEC
             </span>
           )}
         </div>
-      </div>
+      )}
 
       {/* SECTION 01: DESIGN YOUR PLAN */}
       <section className="space-y-4 rounded-2xl bg-slate-900/60 border border-slate-800/80 p-5 sm:p-6 backdrop-blur-sm">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
-            <div className="text-[10px] font-bold uppercase tracking-wider text-purple-400">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-sky-400">
               01 / DESIGN YOUR PLAN
             </div>
             <h2 className="text-lg font-bold text-white mt-0.5">Integration blueprint</h2>
@@ -504,21 +475,31 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
             </p>
           </div>
 
-          <div className="flex items-center gap-2 self-start sm:self-auto">
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+           
+
             <button
               onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 transition cursor-pointer"
             >
-              <Sliders className="w-3.5 h-3.5 text-purple-400" />
+              <Sliders className="w-3.5 h-3.5 text-sky-400" />
               <span>{showAdvancedSettings ? 'Hide Safeguards' : 'Architecture Guardrails'}</span>
             </button>
 
             <button
               onClick={handleAddCustomStage}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 hover:text-purple-200 text-xs font-bold border border-purple-500/40 transition cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 hover:text-sky-200 text-xs font-bold border border-sky-500/40 transition cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>ADD STAGE</span>
+            </button>
+             <button
+              onClick={handleReset}
+              title="Reset the stages to the default Start → End flow"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium border border-slate-700 transition cursor-pointer"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Reset</span>
             </button>
           </div>
         </div>
@@ -533,7 +514,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
             return (
               <div
                 key={stage.id}
-                className="relative rounded-xl bg-slate-900/90 border border-slate-700/80 hover:border-purple-500/50 p-4 transition-all group flex flex-col justify-between"
+                className="relative rounded-xl bg-slate-900/90 border border-slate-700/80 hover:border-sky-500/50 p-4 transition-all group flex flex-col justify-between"
               >
                 <div>
                   <div className="flex items-center justify-between text-xs mb-2">
@@ -584,29 +565,18 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
                     aria-label={`${stepNum} shape name`}
                     placeholder="Shape name on the canvas"
                     maxLength={60}
-                    className="w-full mb-2 bg-transparent border-b border-slate-700 focus:border-purple-500 text-sm font-bold text-white focus:outline-none py-0.5"
+                    className="w-full mb-2 bg-transparent border-b border-slate-700 focus:border-sky-500 text-sm font-bold text-white focus:outline-none py-0.5"
                   />
 
                   {/* Dropdown for shape / connector */}
-                  <div className="relative">
-                    <select
-                      value={stage.selectedShapeOrConnector}
-                      onChange={(e) => updateStage(idx, { selectedShapeOrConnector: e.target.value })}
-                      aria-label={`${stepNum} shape type`}
-                      className="w-full bg-slate-800/90 hover:bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs font-semibold text-slate-100 appearance-none focus:outline-none focus:border-purple-500 pr-8 cursor-pointer"
-                    >
-                      {CATALOG_GROUPS.map(g => (
-                        <optgroup key={g.group} label={g.group} className="bg-slate-900 text-slate-400">
-                          {g.entries.map(e => (
-                            <option key={e.id} value={e.id} className="bg-slate-900 text-slate-200">
-                              {e.label} ({e.tag})
-                            </option>
-                          ))}
-                        </optgroup>
-                      ))}
-                    </select>
-                    <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  </div>
+                  <Select
+                    ariaLabel={`${stepNum} shape type`}
+                    value={stage.selectedShapeOrConnector}
+                    onChange={(v) => updateStage(idx, { selectedShapeOrConnector: v })}
+                    options={SHAPE_OPTIONS}
+                    searchable
+                    size="sm"
+                  />
 
                   <textarea
                     value={stage.notes || ''}
@@ -615,17 +585,23 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
                     placeholder="What it does, e.g. Base64 decode, GET AccountUserRole"
                     rows={2}
                     maxLength={200}
-                    className="mt-2 w-full bg-slate-950/60 border border-slate-800 focus:border-purple-500 rounded-lg px-2.5 py-1.5 text-[11px] text-slate-200 placeholder-slate-600 focus:outline-none resize-none"
+                    className="mt-2 w-full bg-slate-950/60 border border-slate-800 focus:border-sky-500 rounded-lg px-2.5 py-1.5 text-[11px] text-slate-200 placeholder-slate-600 focus:outline-none resize-none"
                   />
                 </div>
 
                 <div className="mt-3 pt-3 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
-                  <span className="flex items-center gap-1.5 text-purple-300/90 font-medium">
-                    <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />
+                  <span className="flex items-center gap-1.5 text-sky-300/90 font-medium">
+                    <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
                     {stage.subLabel || 'Configured shape'}
                   </span>
-                  <span className="text-[10px] text-slate-500 font-mono">
-                    {isSource ? 'START' : isLast ? 'END' : 'CANVAS STEP'}
+                  <span
+                    title={isSource ? 'First shape in the flow' : isLast ? 'Last shape in the flow' : 'Intermediate step on the canvas'}
+                    className={`shrink-0 px-2 py-0.5 rounded-full border text-[10px] font-semibold ${
+                      isSource ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+                        : isLast ? 'bg-rose-500/10 text-rose-300 border-rose-500/30'
+                        : 'bg-slate-800 text-slate-400 border-slate-700'}`}
+                  >
+                    {isSource ? 'Start' : isLast ? 'End' : 'Step'}
                   </span>
                 </div>
               </div>
@@ -635,9 +611,9 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
 
         {/* Collapsible Architecture Guardrails Toggles */}
         {showAdvancedSettings && (
-          <div className="mt-3 p-4 rounded-xl bg-slate-950/70 border border-purple-500/30 space-y-3 animate-fade-in">
-            <div className="flex items-center gap-2 text-xs font-bold text-purple-300">
-              <ShieldCheck className="w-4 h-4 text-purple-400" />
+          <div className="mt-3 p-4 rounded-xl bg-slate-950/70 border border-sky-500/30 space-y-3 animate-fade-in">
+            <div className="flex items-center gap-2 text-xs font-bold text-sky-300">
+              <ShieldCheck className="w-4 h-4 text-sky-400" />
               <span>Boomi Companion Architecture Guardrails (Solving AI Generation Mistakes)</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 text-xs">
@@ -646,7 +622,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
                   type="checkbox"
                   checked={blueprint.settings.enableTryCatchBoundary}
                   onChange={() => toggleSetting('enableTryCatchBoundary')}
-                  className="rounded text-purple-600 focus:ring-purple-500 bg-slate-800 border-slate-700"
+                  className="rounded text-sky-600 focus:ring-sky-500 bg-slate-800 border-slate-700"
                 />
                 <div>
                   <div className="font-semibold text-slate-200">Try/Catch Boundary</div>
@@ -659,7 +635,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
                   type="checkbox"
                   checked={blueprint.settings.separateDPPvsDDP}
                   onChange={() => toggleSetting('separateDPPvsDDP')}
-                  className="rounded text-purple-600 focus:ring-purple-500 bg-slate-800 border-slate-700"
+                  className="rounded text-sky-600 focus:ring-sky-500 bg-slate-800 border-slate-700"
                 />
                 <div>
                   <div className="font-semibold text-slate-200">DPP vs DDP Discipline</div>
@@ -672,7 +648,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
                   type="checkbox"
                   checked={blueprint.settings.enableDocumentSplitCombine}
                   onChange={() => toggleSetting('enableDocumentSplitCombine')}
-                  className="rounded text-purple-600 focus:ring-purple-500 bg-slate-800 border-slate-700"
+                  className="rounded text-sky-600 focus:ring-sky-500 bg-slate-800 border-slate-700"
                 />
                 <div>
                   <div className="font-semibold text-slate-200">Data Process Splitting</div>
@@ -685,7 +661,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
                   type="checkbox"
                   checked={blueprint.settings.enforceIdempotentUpsert}
                   onChange={() => toggleSetting('enforceIdempotentUpsert')}
-                  className="rounded text-purple-600 focus:ring-purple-500 bg-slate-800 border-slate-700"
+                  className="rounded text-sky-600 focus:ring-sky-500 bg-slate-800 border-slate-700"
                 />
                 <div>
                   <div className="font-semibold text-slate-200">Idempotent Upsert</div>
@@ -698,7 +674,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
                   type="checkbox"
                   checked={blueprint.settings.enable3xExponentialRetry}
                   onChange={() => toggleSetting('enable3xExponentialRetry')}
-                  className="rounded text-purple-600 focus:ring-purple-500 bg-slate-800 border-slate-700"
+                  className="rounded text-sky-600 focus:ring-sky-500 bg-slate-800 border-slate-700"
                 />
                 <div>
                   <div className="font-semibold text-slate-200">3x Exponential Retry</div>
@@ -711,7 +687,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
                   type="checkbox"
                   checked={blueprint.settings.deployInitialScheduleDisabled}
                   onChange={() => toggleSetting('deployInitialScheduleDisabled')}
-                  className="rounded text-purple-600 focus:ring-purple-500 bg-slate-800 border-slate-700"
+                  className="rounded text-sky-600 focus:ring-sky-500 bg-slate-800 border-slate-700"
                 />
                 <div>
                   <div className="font-semibold text-slate-200">Disabled Schedule Guard</div>
@@ -726,14 +702,14 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
         <div className="rounded-xl bg-slate-950/80 border border-slate-800 p-3.5 space-y-2">
           <div className="flex items-center justify-between text-xs">
             <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-300 font-bold text-[10px] uppercase border border-purple-500/30">
+              <span className="px-2 py-0.5 rounded-md bg-sky-500/20 text-sky-300 font-bold text-[10px] uppercase border border-sky-500/30">
                 Business rule <span className="font-normal opacity-80">OPTIONAL</span>
               </span>
               <span className="text-slate-400 text-xs hidden sm:inline">
                 Describe any filtering or validation logic in plain English
               </span>
             </div>
-            <span className="text-[11px] font-mono text-purple-300/80">
+            <span className="text-[11px] font-mono text-sky-300/80">
               {businessRuleText.length}/250 · APPLIED
             </span>
           </div>
@@ -747,7 +723,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
             }}
             placeholder="e.g. Only send orders with status = approved. Normalize email to lowercase."
             maxLength={250}
-            className="w-full bg-slate-900 border border-slate-700/80 rounded-lg px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 font-mono"
+            className="w-full bg-slate-900 border border-slate-700/80 rounded-lg px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 font-mono"
           />
         </div>
 
@@ -761,7 +737,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
           <button
             onClick={handleGenerateCompanionSpec}
             disabled={isCompiling}
-            className="w-full sm:w-auto flex items-center justify-center gap-2.5 px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 via-purple-500 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs shadow-lg shadow-purple-900/40 transition-all cursor-pointer disabled:opacity-60"
+            className="w-full sm:w-auto flex items-center justify-center gap-2.5 px-6 py-2.5 rounded-xl bg-gradient-to-r from-boomi-blue to-boomi-accent hover:from-blue-600 hover:to-sky-400 text-white font-bold text-xs shadow-lg shadow-sky-900/30 transition-all cursor-pointer disabled:opacity-60"
           >
             {isCompiling ? (
               <>
@@ -770,7 +746,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
               </>
             ) : (
               <>
-                <Bot className="w-4 h-4 text-purple-200" />
+                <Bot className="w-4 h-4 text-sky-200" />
                 <span>Generate Companion spec</span>
                 <ArrowRight className="w-4 h-4" />
               </>
@@ -783,15 +759,15 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-[10px] font-bold uppercase tracking-wider text-purple-400">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-sky-400">
               02 / COMPILE & REVIEW
             </div>
             <h2 className="text-lg font-bold text-white mt-0.5">Execution plan</h2>
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-500/15 border border-purple-500/30 text-[11px] font-semibold text-purple-300">
-              <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
+            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-500/15 border border-sky-500/30 text-[11px] font-semibold text-sky-300">
+              <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
               {specGenerated ? 'SPEC GENERATED' : 'LIVE PREVIEW'}
             </span>
           </div>
@@ -807,7 +783,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-purple-400" />
+                      <Sparkles className="w-4 h-4 text-sky-400" />
                       <span>Launch in Companion Agent</span>
                     </h3>
                     {promptSource === 'openai' ? (
@@ -816,7 +792,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
                         OpenAI {aiModelUsed}
                       </span>
                     ) : (
-                      <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-semibold">
+                      <span className="px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30 text-[10px] font-semibold">
                         Dynamic Spec
                       </span>
                     )}
@@ -828,7 +804,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
 
                 <button
                   onClick={handleCopyPrompt}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/40 text-xs font-bold transition shrink-0 cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/40 text-xs font-bold transition shrink-0 cursor-pointer"
                 >
                   {copiedPrompt ? (
                     <>
@@ -844,14 +820,14 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
                 </button>
               </div>
 
-              <div className="relative rounded-xl bg-slate-950 border border-slate-800 p-4 font-mono text-[11px] leading-relaxed text-slate-300 max-h-[520px] overflow-y-auto selection:bg-purple-600 selection:text-white">
+              <div className="relative rounded-xl bg-slate-950 border border-slate-800 p-4 font-mono text-[11px] leading-relaxed text-slate-300 max-h-[520px] overflow-y-auto selection:bg-sky-600 selection:text-white">
                 <pre className="whitespace-pre-wrap">{displayedPrompt}</pre>
               </div>
             </div>
 
             {/* Build in Boomi: preview, confirm, result */}
             {(buildPlan || buildResult || buildError) && (
-              <div className="mt-4 rounded-xl bg-slate-950/80 border border-purple-500/30 p-4 space-y-3 text-xs">
+              <div className="mt-4 rounded-xl bg-slate-950/80 border border-sky-500/30 p-4 space-y-3 text-xs">
                 {buildPlan && (
                   <>
                     <div className="font-bold text-white">Create this process in Boomi?</div>
@@ -862,7 +838,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
                         value={processName}
                         onChange={(e) => setProcessName(e.target.value)}
                         aria-label="Boomi process name"
-                        className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white font-mono focus:outline-none focus:border-purple-500"
+                        className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white font-mono focus:outline-none focus:border-sky-500"
                       />
                     </label>
                     <ol className="space-y-1">
@@ -900,7 +876,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
                       <button
                         onClick={handleConfirmBuild}
                         disabled={buildBusy || !processName.trim()}
-                        className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold disabled:opacity-60 cursor-pointer"
+                        className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold disabled:opacity-60 cursor-pointer"
                       >
                         {buildBusy ? 'Creating…' : 'Confirm & create in Boomi'}
                       </button>
@@ -940,13 +916,13 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
                   onClick={handleExportJson}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition cursor-pointer"
                 >
-                  <Download className="w-3.5 h-3.5 text-purple-400" />
+                  <Download className="w-3.5 h-3.5 text-sky-400" />
                   <span>Export .json</span>
                 </button>
                 <button
                   onClick={handlePreviewBuild}
                   disabled={buildBusy}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600/20 hover:bg-purple-600/30 text-purple-200 text-xs font-bold border border-purple-500/40 transition cursor-pointer disabled:opacity-60"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-600/20 hover:bg-sky-600/30 text-sky-200 text-xs font-bold border border-sky-500/40 transition cursor-pointer disabled:opacity-60"
                 >
                   <Layers className="w-3.5 h-3.5" />
                   <span>{buildBusy && !buildPlan ? 'Planning…' : 'Build in Boomi'}</span>
@@ -966,14 +942,14 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
                 <h3 className="text-sm font-bold text-white">Job breakdown</h3>
                 <p className="mt-0.5 text-xs text-slate-400">Plan items derived from the saved blueprint stages.</p>
               </div>
-              <span className="shrink-0 rounded-md border border-purple-500/30 bg-purple-500/10 px-2 py-1 text-[10px] font-bold text-purple-300">{jobBreakdown.length} ITEMS</span>
+              <span className="shrink-0 rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-1 text-[10px] font-bold text-sky-300">{jobBreakdown.length} ITEMS</span>
             </div>
             <div className="mt-3 space-y-2.5 overflow-y-auto pr-1 lg:max-h-[720px]">
               {jobBreakdown.map((item, index) => (
                 <article key={item.id} className="rounded-xl border border-slate-800 bg-slate-950/70 p-3.5">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex min-w-0 items-start gap-2">
-                      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-purple-500/40 bg-purple-500/15 text-[10px] font-bold text-purple-300">{String(index + 1).padStart(2, '0')}</span>
+                      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-sky-500/40 bg-sky-500/15 text-[10px] font-bold text-sky-300">{String(index + 1).padStart(2, '0')}</span>
                       <span className="text-xs font-bold text-white">{item.name}</span>
                     </div>
                     <span className="shrink-0 rounded bg-slate-800 px-2 py-0.5 text-[9px] text-slate-400">{item.componentType}</span>
@@ -993,7 +969,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
 
       {/* Footer bar */}
       <div className="flex items-center justify-between text-[11px] text-slate-500 border-t border-slate-800/80 pt-4">
-        <span>BOOMI OPS COCKPIT // VISUAL ARCHITECTURE COMPILER</span>
+        <span>BOOMIOPS COCKPIT // ARCHFORGE</span>
         <span className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-emerald-400" />
           <span>

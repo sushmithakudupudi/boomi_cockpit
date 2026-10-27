@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
-import { Sidebar, PLACEHOLDER_MODULES, type AppModule, type HealingTab, type CompilerView } from './components/Sidebar';
+import { Sidebar, type AppModule, type HealingTab, type CompilerView } from './components/Sidebar';
 import { CompilerRecordsPage, type BlueprintRecord } from './components/CompilerRecordsPage';
 import { StatsOverview } from './components/StatsOverview';
 import { ProcessFlowGraph } from './components/ProcessFlowGraph';
@@ -20,8 +20,11 @@ import {
   RotateCcw, 
   Layers, 
   CheckCircle2, 
-  AlertTriangle
+  AlertTriangle,
+  HeartPulse,
+  ListFilter
 } from 'lucide-react';
+import { PageHeader } from './components/PageHeader';
 import confetti from 'canvas-confetti';
 
 const READ_FAILURES_KEY = 'boomiops.readFailureIds';
@@ -36,7 +39,6 @@ export function App() {
   const [blueprintId, setBlueprintId] = useState<string | null>(null);
   const [records, setRecords] = useState<BlueprintRecord[]>([]);
   const [activeTab, setActiveTab] = useState<HealingTab>('cockpit');
-  const activePlaceholder = PLACEHOLDER_MODULES.find(m => m.id === activeModule);
   const [executions, setExecutions] = useState<ExecutionRecord[]>([]);
   // Failures the user has already seen in the bell. null until the first load sets a baseline,
   // so failures that existed before today do not all show up as new.
@@ -334,7 +336,7 @@ export function App() {
   const autoHealedCount = executions.filter(e => e.reprocessed).length + (isReprocessed ? 1 : 0);
 
   return (
-    <div className="min-h-screen bg-boomi-navy text-slate-100 flex font-sans selection:bg-boomi-blue selection:text-white">
+    <div className="min-h-screen bg-boomi-dark text-slate-100 flex font-sans selection:bg-boomi-blue selection:text-white">
 
       {/* Vertical Module Navigation */}
       <Sidebar
@@ -357,8 +359,7 @@ export function App() {
         onCloseMobile={() => setIsMobileNavOpen(false)}
       />
 
-      {/* On wide screens the Companion drawer docks beside the page instead of covering it */}
-      <div className={`flex-1 min-w-0 flex flex-col transition-[margin] duration-200 ${isCompanionOpen ? 'lg:mr-[28rem]' : ''}`}>
+      <div className="flex-1 min-w-0 flex flex-col">
       
       {/* Toast Notification */}
       {toastMessage && (
@@ -380,19 +381,10 @@ export function App() {
         unreadFailureIds={unreadFailureIds}
         onOpenFailure={handleOpenFailure}
         onMarkAllRead={handleMarkAllRead}
-        sectionLabel={
-          activeModule === 'compiler' ? 'ArchForge'
-            : activeModule === 'revisions' ? 'RevIQ'
-            : (activePlaceholder?.label ?? 'HealIQ')
-        }
-        pageLabel={
-          activeModule === 'healing'
-            ? (activeTab === 'cockpit' ? 'Live Cockpit' : 'Process Reporting')
-            : activeModule === 'compiler'
-              ? (compilerView === 'draft' ? 'Draft' : compilerView === 'sent' ? 'Sent' : compilerView === 'deleted' ? 'Deleted' : 'New')
-              : activeModule === 'revisions' ? 'RevIQ' : 'Overview'
-        }
       />
+
+      {/* On wide screens the Companion drawer docks beside the page (below the top bar, which keeps its full width) */}
+      <div className={`flex-1 min-w-0 flex flex-col bg-boomi-navy md:rounded-tl-2xl md:border-l md:border-t border-boomi-cardBorder transition-[margin] duration-200 ${isCompanionOpen ? 'lg:mr-[28rem]' : ''}`}>
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
@@ -423,15 +415,6 @@ export function App() {
               onNew={() => handleCompilerView('editor')}
             />
           )
-        ) : activePlaceholder ? (
-          /* Placeholder page for modules not built yet */
-          <div className="flex flex-col items-center justify-center text-center py-32 rounded-2xl border border-dashed border-slate-700 bg-slate-900/40">
-            <div className="p-3 rounded-xl bg-boomi-blue/20 border border-boomi-blue/40 text-boomi-accent mb-3">
-              <activePlaceholder.icon className="w-6 h-6" />
-            </div>
-            <h2 className="text-sm font-bold text-white">{activePlaceholder.label}</h2>
-            <p className="text-xs text-slate-400 mt-1">This section is coming soon.</p>
-          </div>
         ) : activeModule === 'revisions' ? (
           <RevisionHistoryPage
             onAiDocs={(source, component, rev) => {
@@ -441,6 +424,21 @@ export function App() {
           />
         ) : activeTab === 'cockpit' ? (
           <>
+            <PageHeader
+              icon={HeartPulse}
+              title="HealIQ"
+              description="Live cockpit · watch executions, triage failures and reprocess them with Keystone AI."
+              actions={
+                <button
+                  onClick={() => setActiveTab('reporting')}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-semibold border border-slate-700 transition cursor-pointer"
+                >
+                  <ListFilter className="w-3.5 h-3.5 text-sky-400" />
+                  <span>Process Reporting</span>
+                </button>
+              }
+            />
+
             {/* Banner Alert for real active error from Boomi platform */}
             {activeErrorExec ? (
               <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-rose-950/60 via-slate-900/90 to-boomi-dark border border-rose-500/40 p-4 sm:p-5 shadow-xl flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4">
@@ -471,14 +469,14 @@ export function App() {
                     className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-boomi-blue to-boomi-accent hover:from-blue-600 hover:to-sky-400 text-white font-bold text-xs shadow-lg shadow-sky-950 transition-all cursor-pointer"
                   >
                     <Sparkles className="w-4 h-4 text-amber-200" />
-                    <span>Triage with Companion</span>
+                    <span>Triage with Keystone AI</span>
                   </button>
                   <button
                     onClick={() => {
                       setCompanionPrompt(`What changed in ${activeErrorExec.processName} recently, and who changed it?`);
                       setIsCompanionOpen(true);
                     }}
-                    title="Ask the Companion to compare the latest revisions of this process"
+                    title="Ask Keystone AI to compare the latest revisions of this process"
                     className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 transition-all cursor-pointer"
                   >
                     <span>What changed?</span>
@@ -622,6 +620,7 @@ export function App() {
       <footer className="w-full border-t border-boomi-cardBorder bg-boomi-dark/60 py-4 text-center text-xs text-slate-500">
         <p>BoomiOps Cockpit • Connected to Dell Boomi AtomSphere Account: trainingsainikhilbadathal-WEUHDR</p>
       </footer>
+      </div>
       </div>
 
       {/* Re-run confirmation: this really executes the process */}

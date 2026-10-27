@@ -76,7 +76,7 @@ export const CustomBoomiNode: FC<NodeProps<Node<BoomiNodeData>>> = ({ data }) =>
       {/* Error Banner if failed */}
       {isError && data.errorMessage && (
         <div className="mt-2.5 p-2 rounded-lg bg-rose-500/15 border border-rose-500/40 text-[10px] text-rose-300 leading-tight">
-          <span className="font-semibold block text-rose-200">Companion Alert:</span>
+          <span className="font-semibold block text-rose-200">Keystone AI Alert:</span>
           {data.errorMessage}
         </div>
       )}

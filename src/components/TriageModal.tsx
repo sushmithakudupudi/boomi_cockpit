@@ -19,6 +19,13 @@ interface TriageModalProps {
   onAutoHeal: (execId: string) => void;
 }
 
+const STATUS_TONE: Record<string, string> = {
+  SUCCESS: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+  ERROR: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
+  WARNING: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+  IN_PROGRESS: 'bg-sky-500/15 text-sky-300 border-sky-500/30',
+};
+
 export const TriageModal: React.FC<TriageModalProps> = ({
   execution,
   onClose,
@@ -30,6 +37,7 @@ export const TriageModal: React.FC<TriageModalProps> = ({
   if (!execution) return null;
 
   const analysis = execution.companionAnalysis;
+  const canHeal = !!analysis?.autoHealAvailable && !execution.reprocessed;
   const payload = execution.payload;
 
   const handleApplyFix = () => {
@@ -58,8 +66,8 @@ export const TriageModal: React.FC<TriageModalProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-white">Boomi Companion Incident Triage</h3>
-                <span className="text-xs px-2.5 py-0.5 rounded-full bg-rose-500/15 text-rose-400 border border-rose-500/30 font-semibold">
+                <h3 className="text-base font-bold text-white">Keystone AI Incident Triage</h3>
+                <span className={`text-xs px-2.5 py-0.5 rounded-full border font-semibold ${STATUS_TONE[execution.status] ?? 'bg-slate-800 text-slate-300 border-slate-700'}`}>
                   {execution.status}
                 </span>
               </div>
@@ -157,7 +165,7 @@ export const TriageModal: React.FC<TriageModalProps> = ({
               <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800">
                 <div className="flex items-center gap-2 text-xs font-bold text-sky-300 mb-2">
                   <Sparkles className="w-4 h-4 text-boomi-accent" />
-                  <span>Boomi Companion Root Cause Explanation</span>
+                  <span>Keystone AI Root Cause Explanation</span>
                 </div>
                 <p className="text-xs text-slate-300 leading-relaxed">
                   {analysis?.rootCause || execution.errorMessage}
@@ -205,7 +213,7 @@ export const TriageModal: React.FC<TriageModalProps> = ({
                 {/* Right: Companion Fixed Document */}
                 <div className="flex flex-col rounded-xl border border-emerald-500/40 bg-emerald-950/10 overflow-hidden">
                   <div className="px-3.5 py-2 bg-emerald-950/30 border-b border-emerald-500/20 text-xs font-semibold text-emerald-300 flex items-center justify-between">
-                    <span>Companion Repaired Document</span>
+                    <span>Keystone AI Repaired Document</span>
                     <span className="text-[10px] text-emerald-400">Validated</span>
                   </div>
                   <pre className="p-3.5 text-[11px] font-mono text-emerald-200/90 overflow-x-auto max-h-80">
@@ -235,42 +243,36 @@ export const TriageModal: React.FC<TriageModalProps> = ({
           )}
         </div>
 
-        {/* Modal Footer Actions */}
-        <div className="flex items-center justify-between p-4 border-t border-boomi-cardBorder bg-slate-900/90">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white transition cursor-pointer"
-          >
-            Close
-          </button>
-
-          {analysis?.autoHealAvailable && !execution.reprocessed && (
-            <button
-              onClick={handleApplyFix}
-              disabled={isHealing}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold text-xs shadow-lg shadow-emerald-950 transition-all cursor-pointer disabled:opacity-50"
-            >
-              {isHealing ? (
-                <>
-                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Reprocessing via Boomi AtomSphere API...</span>
-                </>
-              ) : (
-                <>
-                  <Zap className="w-4 h-4 text-amber-200" />
-                  <span>Execute HealIQ & Reprocess</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </>
-              )}
-            </button>
-          )}
-
-          {execution.reprocessed && (
-            <span className="flex items-center gap-1.5 text-xs text-emerald-400 font-bold bg-emerald-500/10 px-3 py-1.5 rounded-lg border border-emerald-500/30">
-              <CheckCircle2 className="w-4 h-4" /> Process Already Auto-Healed
-            </span>
-          )}
-        </div>
+        {/* Modal Footer Actions: only when there is something to do or report (the ✕ in the header closes) */}
+        {(canHeal || execution.reprocessed) && (
+          <div className="flex items-center justify-end p-4 border-t border-boomi-cardBorder bg-slate-900/90">
+            {canHeal && (
+              <button
+                onClick={handleApplyFix}
+                disabled={isHealing}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold text-xs shadow-lg shadow-emerald-950 transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isHealing ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Reprocessing via Boomi AtomSphere API...</span>
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-4 h-4 text-amber-200" />
+                    <span>Execute HealIQ & Reprocess</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </>
+                )}
+              </button>
+            )}
+            {execution.reprocessed && (
+              <span className="flex items-center gap-1.5 text-xs text-emerald-400 font-bold bg-emerald-500/10 px-3 py-1.5 rounded-lg border border-emerald-500/30">
+                <CheckCircle2 className="w-4 h-4" /> Process Already Auto-Healed
+              </span>
+            )}
+          </div>
+        )}
 
       </div>
     </div>

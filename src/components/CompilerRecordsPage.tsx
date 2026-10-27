@@ -83,7 +83,7 @@ export const CompilerRecordsPage: React.FC<Props> = ({ kind, records, onOpen, on
     <div className="space-y-5 pb-12 animate-fade-in text-slate-200">
       <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-800">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-purple-500/15 border border-purple-500/30 text-purple-300">
+          <div className="p-2 rounded-lg bg-sky-500/15 border border-sky-500/30 text-sky-300">
             <Icon className="w-5 h-5" />
           </div>
           <div>
@@ -97,7 +97,7 @@ export const CompilerRecordsPage: React.FC<Props> = ({ kind, records, onOpen, on
         </div>
         <button
           onClick={onNew}
-          className="px-3 py-1.5 rounded-lg bg-purple-600/20 hover:bg-purple-600/30 text-purple-200 text-xs font-bold border border-purple-500/40 cursor-pointer"
+          className="px-3 py-1.5 rounded-lg bg-sky-600/20 hover:bg-sky-600/30 text-sky-200 text-xs font-bold border border-sky-500/40 cursor-pointer"
         >
           + New blueprint
         </button>
@@ -136,7 +136,7 @@ export const CompilerRecordsPage: React.FC<Props> = ({ kind, records, onOpen, on
                   ) : isDraft ? (
                     <button
                       onClick={() => onOpen(r)}
-                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-600/20 hover:bg-purple-600/30 text-purple-200 text-xs font-bold border border-purple-500/40 cursor-pointer"
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-600/20 hover:bg-sky-600/30 text-sky-200 text-xs font-bold border border-sky-500/40 cursor-pointer"
                     >
                       <Pencil className="w-3.5 h-3.5" /> Open
                     </button>
@@ -215,7 +215,7 @@ export const CompilerRecordsPage: React.FC<Props> = ({ kind, records, onOpen, on
               <section className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-purple-400">01 / DESIGN YOUR PLAN</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-sky-400">01 / DESIGN YOUR PLAN</p>
                     <h3 className="mt-0.5 text-base font-bold text-white">Integration blueprint</h3>
                     <p className="mt-1 text-xs text-slate-400">Read-only snapshot of the saved stages and configuration.</p>
                   </div>
@@ -225,7 +225,7 @@ export const CompilerRecordsPage: React.FC<Props> = ({ kind, records, onOpen, on
                   {viewRecord.stages.map((stage, index) => {
                     const isSource = index === 0;
                     const isLast = index === viewRecord.stages.length - 1;
-                    return <article key={`${viewRecord.id}-${index}`} className={`flex min-h-[250px] flex-col justify-between rounded-xl border p-4 ${isSource ? 'border-purple-500/60 bg-slate-900/90' : 'border-slate-700/80 bg-slate-900/90'}`}>
+                    return <article key={`${viewRecord.id}-${index}`} className={`flex min-h-[250px] flex-col justify-between rounded-xl border p-4 ${isSource ? 'border-sky-500/60 bg-slate-900/90' : 'border-slate-700/80 bg-slate-900/90'}`}>
                       <div>
                         <div className="mb-3 flex items-center justify-between text-xs">
                           <div className="flex items-center gap-1.5"><span className="text-[11px] font-bold tracking-wider text-slate-400">STEP {String(index + 1).padStart(2, '0')}</span><Check className="h-3.5 w-3.5 text-emerald-400" /></div>
@@ -237,7 +237,7 @@ export const CompilerRecordsPage: React.FC<Props> = ({ kind, records, onOpen, on
                         <div className="mt-2 min-h-[52px] whitespace-pre-wrap rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-[11px] text-slate-300">{stage.notes || <span className="text-slate-600">No configuration notes</span>}</div>
                         {stage.details && Object.keys(stage.details).length > 0 && <pre className="mt-2 overflow-x-auto whitespace-pre-wrap rounded-lg border border-slate-800 bg-slate-950/50 p-2 text-[10px] text-slate-500">{JSON.stringify(stage.details, null, 2)}</pre>}
                       </div>
-                      <div className="mt-3 flex items-center justify-between border-t border-slate-800 pt-3 text-[11px] text-slate-400"><span className="flex items-center gap-1.5 font-medium text-purple-300/90"><span className="h-1.5 w-1.5 rounded-full bg-purple-400" />{stage.subLabel || 'Configured shape'}</span><span className="text-[10px] font-mono text-slate-500">{isSource ? 'START' : isLast ? 'END' : 'CANVAS STEP'}</span></div>
+                      <div className="mt-3 flex items-center justify-between border-t border-slate-800 pt-3 text-[11px] text-slate-400"><span className="flex items-center gap-1.5 font-medium text-sky-300/90"><span className="h-1.5 w-1.5 rounded-full bg-sky-400" />{stage.subLabel || 'Configured shape'}</span><span className="text-[10px] font-mono text-slate-500">{isSource ? 'START' : isLast ? 'END' : 'CANVAS STEP'}</span></div>
                     </article>;
                   })}
                 </div>
@@ -245,15 +245,15 @@ export const CompilerRecordsPage: React.FC<Props> = ({ kind, records, onOpen, on
               {viewRecord.settings && <section><h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">Blueprint settings</h3><dl className="grid gap-2 sm:grid-cols-2">{Object.entries(viewRecord.settings).map(([name, value]) => <div key={name} className="rounded-lg border border-slate-800 bg-slate-950/60 p-3"><dt className="text-xs text-slate-400">{name.replace(/([A-Z])/g, ' $1')}</dt><dd className="mt-1 text-xs font-semibold text-slate-200">{String(value)}</dd></div>)}</dl></section>}
               </section>
               <section className="space-y-3 rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
-                <div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-wider text-purple-400">02 / COMPILE &amp; REVIEW</p><h3 className="mt-0.5 text-base font-bold text-white">Execution plan</h3></div><span className="rounded-full border border-slate-700 bg-slate-800 px-2.5 py-1 text-[10px] font-bold text-slate-300">READ-ONLY PREVIEW</span></div>
+                <div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-wider text-sky-400">02 / COMPILE &amp; REVIEW</p><h3 className="mt-0.5 text-base font-bold text-white">Execution plan</h3></div><span className="rounded-full border border-slate-700 bg-slate-800 px-2.5 py-1 text-[10px] font-bold text-slate-300">READ-ONLY PREVIEW</span></div>
                 <div className="grid gap-2 sm:grid-cols-3">
                   <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-3 text-center"><div className="text-[10px] font-bold uppercase text-slate-500">Plan items</div><div className="text-lg font-extrabold text-white">{deletedJobs.length}</div></div>
-                  <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-3 text-center"><div className="text-[10px] font-bold uppercase text-slate-500">Included gates</div><div className="text-lg font-extrabold text-purple-300">{deletedGates.length}</div></div>
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-3 text-center"><div className="text-[10px] font-bold uppercase text-slate-500">Included gates</div><div className="text-lg font-extrabold text-sky-300">{deletedGates.length}</div></div>
                   <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-3 text-center"><div className="text-[10px] font-bold uppercase text-slate-500">Stages</div><div className="text-lg font-extrabold text-white">{viewRecord.stages.length}</div></div>
                 </div>
                 <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3"><div className="flex items-center justify-between gap-3"><div><h4 className="text-xs font-bold text-white">Compiler status</h4><p className="mt-1 text-[11px] text-slate-400">Prompt and execution plan reconstructed from this saved blueprint with the local rules engine.</p></div><span className="rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-1 text-[10px] font-bold text-sky-300">PREVIEW</span></div></div>
-                <div className="space-y-2">{deletedJobs.map((job, index) => <article key={job.id} className="rounded-xl border border-slate-800 bg-slate-950/70 p-3"><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-mono text-xs font-bold text-purple-300">{String(index + 1).padStart(2, '0')} · {job.name}</span><span className="rounded bg-slate-800 px-2 py-0.5 text-[10px] text-slate-400">{job.componentType}</span></div><p className="mt-1 text-xs text-slate-300">{job.purpose}</p><div className="mt-2 flex flex-wrap gap-1.5">{job.shapesInvolved.map((shape, shapeIndex) => <span key={shapeIndex} className="rounded border border-slate-800 bg-slate-900 px-2 py-0.5 text-[10px] text-slate-400">{shape}</span>)}</div><p className="mt-1 text-[11px] text-slate-500">Folder: {job.boomiFolder}</p></article>)}</div>
-                <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3"><div className="mb-2 flex items-center justify-between gap-3"><h4 className="flex items-center gap-2 text-xs font-bold text-white"><Terminal className="h-3.5 w-3.5 text-purple-400" /> Companion prompt</h4><button onClick={copyDeletedPrompt} className="flex items-center gap-1.5 rounded-lg border border-purple-500/40 bg-purple-600/20 px-2.5 py-1.5 text-[11px] font-bold text-purple-200 hover:bg-purple-600/30">{copiedDeletedPrompt ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Clipboard className="h-3.5 w-3.5" />}{copiedDeletedPrompt ? 'Copied' : 'Copy prompt'}</button></div><pre className="max-h-72 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-slate-950 p-3 font-mono text-[11px] leading-relaxed text-slate-300">{deletedPrompt}</pre></div>
+                <div className="space-y-2">{deletedJobs.map((job, index) => <article key={job.id} className="rounded-xl border border-slate-800 bg-slate-950/70 p-3"><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-mono text-xs font-bold text-sky-300">{String(index + 1).padStart(2, '0')} · {job.name}</span><span className="rounded bg-slate-800 px-2 py-0.5 text-[10px] text-slate-400">{job.componentType}</span></div><p className="mt-1 text-xs text-slate-300">{job.purpose}</p><div className="mt-2 flex flex-wrap gap-1.5">{job.shapesInvolved.map((shape, shapeIndex) => <span key={shapeIndex} className="rounded border border-slate-800 bg-slate-900 px-2 py-0.5 text-[10px] text-slate-400">{shape}</span>)}</div><p className="mt-1 text-[11px] text-slate-500">Folder: {job.boomiFolder}</p></article>)}</div>
+                <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3"><div className="mb-2 flex items-center justify-between gap-3"><h4 className="flex items-center gap-2 text-xs font-bold text-white"><Terminal className="h-3.5 w-3.5 text-sky-400" /> Companion prompt</h4><button onClick={copyDeletedPrompt} className="flex items-center gap-1.5 rounded-lg border border-sky-500/40 bg-sky-600/20 px-2.5 py-1.5 text-[11px] font-bold text-sky-200 hover:bg-sky-600/30">{copiedDeletedPrompt ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Clipboard className="h-3.5 w-3.5" />}{copiedDeletedPrompt ? 'Copied' : 'Copy prompt'}</button></div><pre className="max-h-72 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-slate-950 p-3 font-mono text-[11px] leading-relaxed text-slate-300">{deletedPrompt}</pre></div>
               </section>
               {viewRecord.buildResult && <section><h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">Boomi process details</h3><div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 text-xs text-slate-300">{viewRecord.buildResult.name && <p>Name: {viewRecord.buildResult.name}</p>}{viewRecord.buildResult.componentId && <p>Component ID: {viewRecord.buildResult.componentId}</p>}<p>Folder: {viewRecord.buildResult.folder || 'default'}</p></div></section>}
             </div>

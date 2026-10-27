@@ -91,7 +91,7 @@ CURRENT ACTIVE INCIDENT:
 - Offending Component: {fe.get('errorShapeName', 'Connector / Action shape')}
 """
 
-        system_prompt = f"""You are Boomi Companion, the Autonomous Integration Operations & Self-Healing Copilot built directly into the BoomiOps Command Center for Dell Boomi AtomSphere.
+        system_prompt = f"""You are Keystone AI, the Autonomous Integration Operations & Self-Healing Copilot built directly into the BoomiOps Command Center for Dell Boomi AtomSphere.
 Boomi Account: {settings.BOOMI_ACCOUNT_ID}
 
 YOUR ROLES & RESPONSIBILITIES:
@@ -298,7 +298,7 @@ OUTPUT CONVENTIONS:
                 res = await self._openai_client.chat.completions.create(
                     model="gpt-4o-mini",
                     messages=[
-                        {"role": "system", "content": "You are Boomi Companion integration diagnostic engine."},
+                        {"role": "system", "content": "You are Keystone AI, an integration diagnostic engine."},
                         {"role": "user", "content": prompt}
                     ],
                     max_tokens=300,

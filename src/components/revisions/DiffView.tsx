@@ -2,7 +2,8 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from '
 import { AlertTriangle, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Info, Map as MapIcon, Minus, Pencil, Plus, Search, Settings2, Shapes, X } from 'lucide-react';
 import type { ChangeCategory, ChangeEntry, ChangeType, ComparisonResult, ComponentRef, FieldChange } from '../../types/revisions';
 import { EmptyState, SourceBanner } from './shared';
-import { componentTypeLabel, fieldLabel, GUID_RE, inputCls, isLongText, wordDiff } from './utils';
+import { componentTypeLabel, fieldHint, fieldLabel, GUID_RE, inputCls, isLongText, wordDiff } from './utils';
+import { useElementWidth } from '../../hooks/useElementWidth';
 
 type TabId = 'all' | ChangeCategory;
 
@@ -26,6 +27,10 @@ const SCOPE_LABEL: Record<string, string> = {
 };
 
 const RefsContext = createContext<Record<string, ComponentRef>>({});
+
+/** Lets long identifiers like RedTeam_Gateway_Request_JSON_Profile wrap after _ . - instead of mid-word. */
+const breakable = (name: string) =>
+  name.split(/(?<=[_.-])/).map((part, i) => <React.Fragment key={i}>{i > 0 && <wbr />}{part}</React.Fragment>);
 /** Bumped by "Expand all" / "Collapse all"; rows follow the latest command. */
 const ExpandContext = createContext<{ open: boolean; n: number }>({ open: false, n: 0 });
 
@@ -42,8 +47,8 @@ const Value: React.FC<{ v: unknown }> = ({ v }) => {
     if (m.index! > last) parts.push(s.slice(last, m.index));
     parts.push(ref ? (
       <span key={m.index} title={`${componentTypeLabel(ref.type)} · ${id}`}
-        className="inline-flex items-baseline gap-1 px-1.5 rounded-md bg-sky-500/10 border border-sky-500/30 text-sky-200 font-sans not-italic break-words">
-        {ref.name}<span className="text-[9px] text-sky-400/80 uppercase tracking-wide">{componentTypeLabel(ref.type)}</span>
+        className="inline px-1.5 py-px rounded-md bg-sky-500/10 border border-sky-500/30 text-sky-200 font-sans not-italic break-words [box-decoration-break:clone] [-webkit-box-decoration-break:clone] leading-relaxed">
+        {breakable(ref.name)}<span className="ml-1 text-[9px] text-sky-400/80 uppercase tracking-wide whitespace-nowrap">{componentTypeLabel(ref.type)}</span>
       </span>
     ) : (
       <span key={m.index} title="Component not found in this account" className="text-slate-400">{id}</span>
@@ -78,8 +83,8 @@ const FieldChanges: React.FC<{ fields: FieldChange[] }> = ({ fields }) => (
       const long = f.old && f.new && !f.masked && (isLongText(f.old) || isLongText(f.new));
       return (
         <div key={f.field} className="grid grid-cols-1 sm:grid-cols-[minmax(0,28%)_minmax(0,1fr)_minmax(0,1fr)] border-t border-slate-800 first:border-t-0 sm:first:border-t text-[11px]">
-          <div className="px-3 pt-2 sm:py-2" title={f.field}>
-            <div className="font-semibold text-slate-200">{label}</div>
+          <div className="px-3 pt-2 sm:py-2" title={fieldHint(f.field) ?? f.field}>
+            <div className="font-semibold text-slate-200">{label}{fieldHint(f.field) && <Info className="inline w-3 h-3 ml-1 -mt-0.5 text-slate-500" aria-label="More info" />}</div>
             {label !== f.field && <div className="text-[9px] text-slate-600 font-mono break-all">{f.field}</div>}
           </div>
           {long ? (
@@ -110,8 +115,8 @@ const ConfigPanel: React.FC<{ title: string; data: Record<string, unknown> | nul
       <dl className="p-2 space-y-0.5 text-[11px] max-h-72 overflow-auto">
         {Object.entries(data).map(([k, v]) => (
           <div key={k} className={`grid grid-cols-[minmax(0,40%)_minmax(0,1fr)] gap-2 px-1.5 py-1 rounded ${changed.has(k) ? (tone === 'old' ? 'bg-rose-500/15' : 'bg-emerald-500/15') : ''}`}>
-            <dt className="text-slate-400 break-words" title={k}>{fieldLabel(k)}</dt>
-            <dd className="text-slate-200 font-mono break-words line-clamp-6 min-w-0"><Value v={v} /></dd>
+            <dt className="text-slate-400 break-words" title={fieldHint(k) ?? k}>{fieldLabel(k)}{fieldHint(k) && <Info className="inline w-3 h-3 ml-1 -mt-0.5 text-slate-500" aria-label="More info" />}</dt>
+            <dd className="text-slate-200 font-mono [overflow-wrap:anywhere] leading-relaxed min-w-0"><Value v={v} /></dd>
           </div>
         ))}
       </dl>
@@ -241,6 +246,7 @@ export const DiffView: React.FC<Props> = ({ result, includeUnchanged, onToggleUn
   const [types, setTypes] = useState<Record<ChangeType, boolean>>({ added: true, modified: true, removed: true, unchanged: true });
   const [query, setQuery] = useState('');
   const [expand, setExpand] = useState({ open: false, n: 0 });
+  const [rootRef, rootWidth] = useElementWidth<HTMLDivElement>();
   const { summary } = result;
 
   const counts = (id: TabId) => (id === 'all' ? summary.total : summary.byCategory[id].total);
@@ -260,7 +266,7 @@ export const DiffView: React.FC<Props> = ({ result, includeUnchanged, onToggleUn
   return (
     <RefsContext.Provider value={result.references ?? {}}>
       <ExpandContext.Provider value={expand}>
-        <div className="space-y-3">
+        <div ref={rootRef} className="space-y-3">
           <SourceBanner source={result.source} />
 
           {result.warnings.map((w) => (
@@ -270,7 +276,7 @@ export const DiffView: React.FC<Props> = ({ result, includeUnchanged, onToggleUn
           ))}
 
           {/* Summary: the change-type cards double as filters */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className={`grid gap-2 ${rootWidth >= 520 ? 'grid-cols-4' : 'grid-cols-2'}`}>
             {cards.map((c) => {
               const off = c.type !== null && !types[c.type];
               const Tag = c.type ? 'button' : 'div';
@@ -285,8 +291,8 @@ export const DiffView: React.FC<Props> = ({ result, includeUnchanged, onToggleUn
           </div>
 
           {/* Toolbar */}
-          <div className="flex flex-col xl:flex-row xl:items-center gap-2">
-            <div role="tablist" className="flex gap-1 p-1 rounded-xl bg-slate-900/80 border border-slate-800 overflow-x-auto shrink-0 [scrollbar-width:none]">
+          <div className="flex flex-wrap items-center gap-2">
+            <div role="tablist" className="flex max-w-full gap-1 p-1 rounded-xl bg-slate-900/80 border border-slate-800 overflow-x-auto [scrollbar-width:none]">
               {TABS.map((t) => (
                 <button key={t.id} role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}
                   className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition cursor-pointer ${tab === t.id ? 'bg-slate-800 text-white font-semibold' : 'text-slate-400 hover:text-slate-200'}`}>
@@ -295,7 +301,7 @@ export const DiffView: React.FC<Props> = ({ result, includeUnchanged, onToggleUn
                 </button>
               ))}
             </div>
-            <div className="flex flex-1 gap-2 min-w-0">
+            <div className="flex grow basis-[260px] gap-2 min-w-0">
               <div className="relative flex-1 min-w-0">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
                 <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find a shape, field or value…" aria-label="Filter changes"
@@ -306,7 +312,7 @@ export const DiffView: React.FC<Props> = ({ result, includeUnchanged, onToggleUn
               </div>
               <button onClick={() => setExpand((e) => ({ open: !e.open, n: e.n + 1 }))}
                 title={expand.open ? 'Collapse all' : 'Expand all'}
-                className="flex items-center gap-1.5 px-3 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-300 hover:text-white transition cursor-pointer shrink-0">
+                className="flex items-center gap-1.5 px-3 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-300 hover:text-white transition cursor-pointer shrink-0 whitespace-nowrap">
                 {expand.open ? <ChevronsDownUp className="w-3.5 h-3.5" /> : <ChevronsUpDown className="w-3.5 h-3.5" />}
                 <span className="hidden sm:inline">{expand.open ? 'Collapse all' : 'Expand all'}</span>
               </button>

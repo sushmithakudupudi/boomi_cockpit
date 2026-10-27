@@ -141,7 +141,7 @@ export const ProcessFlowGraph: React.FC<ProcessFlowGraphProps> = ({
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-boomi-blue to-boomi-accent hover:from-blue-600 hover:to-sky-400 text-white text-xs font-semibold shadow-lg shadow-sky-900/30 transition-all cursor-pointer"
               >
                 <Sparkles className="w-3.5 h-3.5 text-amber-200" />
-                Ask Boomi Companion
+                Ask Keystone AI
               </button>
               <button
                 onClick={onSimulateHeal}
@@ -185,7 +185,7 @@ export const ProcessFlowGraph: React.FC<ProcessFlowGraphProps> = ({
             color="rgb(var(--c-slate-700))" 
           />
           <Controls 
-            className="!bg-slate-900/90 !border-slate-800 !rounded-xl !shadow-xl !fill-slate-300 overflow-hidden" 
+            
           />
           <MiniMap
             nodeColor={(n) => {

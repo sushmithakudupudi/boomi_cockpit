@@ -108,6 +108,7 @@ const FIELD_LABELS: Record<string, string> = {
   script: 'Script',
   description: 'Description',
   elementName: 'Profile element',
+  elementId: 'Element key',
   propertyId: 'Property id',
   propertyName: 'Property name',
   defaultValue: 'Default value',
@@ -127,6 +128,20 @@ const humanize = (s: string) =>
     .replace(/[_.-]+/g, ' ')
     .trim()
     .replace(/^./, (c) => c.toUpperCase());
+
+/** Plain-language explanations shown on hover for fields whose raw values are easy to misread. */
+const FIELD_HINTS: Record<string, string> = {
+  elementId: "Boomi's internal key for the element inside the profile. Every node in the profile tree is numbered, including Root and Object, so the first field under Root/Object is usually key 3. It is not the element's position in the list.",
+  propertyId: 'Internal identifier of the document or process property.',
+  profileId: 'The profile component this element belongs to (shown by name).',
+};
+
+const attrName = (path: string) => {
+  const m = path.match(/(?:^|\/)([^/]*?)(?:@([\w.:-]+)|#text)$/);
+  return m ? (m[2] ?? m[1].replace(/\[[^\]]*\]$/, '')) : path;
+};
+
+export const fieldHint = (path: string): string | undefined => FIELD_HINTS[attrName(path)];
 
 /** "connectoraction/parameters/parametervalue[0]/staticparameter@staticproperty" → "Static value" */
 export const fieldLabel = (path: string): string => {

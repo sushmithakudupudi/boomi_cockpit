@@ -58,7 +58,7 @@ export const DEFAULT_STAGES: Stage[] = [
 export const PRESET_BLUEPRINTS: { id: string; name: string; description: string; config: BlueprintConfig }[] = [
   {
     id: 'rest-to-salesforce',
-    name: 'REST API Ã¢Å¾â€ Map & Transform Ã¢Å¾â€ Salesforce (Approved Orders)',
+    name: 'REST API ➔ Map & Transform ➔ Salesforce (Approved Orders)',
     description: 'Standard order ingestion from REST API with status filtering, email normalization, and Salesforce Upsert.',
     config: {
       blueprintId: '98-3830-188',
@@ -77,7 +77,7 @@ export const PRESET_BLUEPRINTS: { id: string; name: string; description: string;
   },
   {
     id: 'sap-to-netsuite',
-    name: 'SAP IDoc Ã¢Å¾â€ Business Rules Ã¢Å¾â€ NetSuite Customer Sync',
+    name: 'SAP IDoc ➔ Business Rules ➔ NetSuite Customer Sync',
     description: 'B2B enterprise pipeline syncing customer masters from SAP ORDERS05/DEBMAS with data quality verification.',
     config: {
       blueprintId: '77-1042-491',
@@ -144,7 +144,7 @@ export const PRESET_BLUEPRINTS: { id: string; name: string; description: string;
   },
   {
     id: 'webhook-to-postgres',
-    name: 'Webhook Event Ã¢Å¾â€ Try/Catch & DPP Ã¢Å¾â€ PostgreSQL / S3 DLQ',
+    name: 'Webhook Event ➔ Try/Catch & DPP ➔ PostgreSQL / S3 DLQ',
     description: 'High-frequency streaming webhook with document caching, dead-letter routing, and database insert.',
     config: {
       blueprintId: '44-9021-337',
@@ -452,7 +452,7 @@ export const generateBoomiCompanionPrompt = (config: BlueprintConfig): string =>
 ## Integration Blueprint (ID: ${config.blueprintId})
 Build ONE Boomi process whose canvas contains these shapes, connected left to right in exactly this order:`);
   out.push(config.stages.map((s, i) => {
-    const notes = s.notes?.trim() ? ` â€” ${s.notes.trim()}` : '';
+    const notes = s.notes?.trim() ? ` — ${s.notes.trim()}` : '';
     return `${i + 1}. "${s.label}" [${s.selectedShapeOrConnector}]${notes}`;
   }).join('\n'));
   out.push(`Use each quoted name as the shape label on the canvas.

@@ -237,7 +237,7 @@ export const api = {
       return {
         id: `comp-${Date.now()}`,
         sender: 'companion',
-        text: 'Boomi Companion could not reach its chat service, so I could not check your request or current account data. Please try again when the connection is restored.',
+        text: 'Keystone AI could not reach its chat service, so I could not check your request or current account data. Please try again when the connection is restored.',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
     }

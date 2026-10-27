@@ -1,15 +1,12 @@
 import React, { useState } from 'react';
 import {
-  Bot,
   HeartPulse,
   GitCompareArrows,
-  Layers3,
   LayoutDashboard,
   ListFilter,
   ChevronDown,
   PanelLeftClose,
   PanelLeftOpen,
-  Server,
   Wand2,
   Plus,
   FileEdit,
@@ -18,14 +15,9 @@ import {
 } from 'lucide-react';
 import type { AtomHealth } from '../types/boomi';
 
-export type AppModule = 'healing' | 'compiler' | 'revisions' | 'module3';
+export type AppModule = 'healing' | 'compiler' | 'revisions';
 export type HealingTab = 'cockpit' | 'reporting';
 export type CompilerView = 'editor' | 'draft' | 'sent' | 'deleted';
-
-// Placeholder modules — rename / fill in as each one gets built
-export const PLACEHOLDER_MODULES: { id: Exclude<AppModule, 'healing' | 'compiler' | 'revisions'>; label: string; hint: string; icon: React.ElementType }[] = [
-  { id: 'module3', label: 'Component Catalog', hint: 'Coming soon', icon: Layers3 },
-];
 
 interface SidebarProps {
   activeModule: AppModule;
@@ -75,7 +67,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   deletedCount = 0,
   healingAlertCount = 0,
   executionsCount = 0,
-  atom,
   mobileOpen = false,
   onCloseMobile,
 }) => {
@@ -94,8 +85,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       /* storage unavailable */
     }
   };
-
-  const isOnline = atom?.status === 'ONLINE';
 
   const subItems: { id: HealingTab; label: string; icon: React.ElementType; count?: number }[] = [
     { id: 'cockpit', label: 'Live Cockpit', icon: LayoutDashboard },
@@ -156,15 +145,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <>
     {mobileOpen && <div className="md:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" onClick={onCloseMobile} aria-hidden="true" />}
     <aside
-      className={`fixed md:sticky inset-y-0 left-0 md:top-0 z-50 md:z-auto h-screen shrink-0 flex flex-col bg-boomi-dark border-r border-boomi-cardBorder transition-[width,transform] duration-200 w-64 ${
+      className={`fixed md:sticky inset-y-0 left-0 md:top-0 z-50 md:z-auto h-screen shrink-0 flex flex-col bg-boomi-dark border-r border-boomi-cardBorder md:border-r-0 transition-[width,transform] duration-200 w-64 ${
         collapsedPref ? 'md:w-[72px]' : 'md:w-64'
       } ${mobileOpen ? 'translate-x-0 shadow-2xl shadow-black/60' : '-translate-x-full'} md:translate-x-0`}
     >
       {/* Brand */}
-      <div className={`h-16 flex items-center gap-3 border-b border-boomi-cardBorder ${isCollapsed ? 'justify-center' : 'px-4'}`}>
-        <div className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-tr from-boomi-blue to-boomi-accent shadow-lg shadow-sky-500/20 shrink-0">
-          <Bot className="w-5 h-5 text-white" />
-          <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-400 rounded-full border-2 border-boomi-dark animate-pulse" />
+      <div className={`h-16 flex items-center gap-3 ${isCollapsed ? 'justify-center' : 'px-4'}`}>
+        <div className="relative flex items-center justify-center w-9 h-9 p-0.5 rounded-xl bg-[#ffffff] border border-boomi-cardBorder shadow-sm shrink-0">
+          <img src="/esi-logo.png" alt="ESI" className="w-full h-full object-contain" />
         </div>
         {!isCollapsed && (
           <div className="min-w-0">
@@ -176,7 +164,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Navigation (picking a page closes the drawer on small screens) */}
       <nav
-        className={`flex-1 p-3 space-y-1 ${isCollapsed ? '' : 'overflow-y-auto'}`}
+        className={`flex-1 p-3 space-y-1 ${isCollapsed ? '' : 'overflow-y-auto overflow-x-hidden'}`}
         onClick={(e) => { if ((e.target as HTMLElement).closest('button')) onCloseMobile?.(); }}
       >
  
@@ -291,45 +279,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         )}
 
-        {moduleButton('revisions', 'RevIQ', 'Browse & compare versions', GitCompareArrows)}
-
-        {PLACEHOLDER_MODULES.map(({ id, label, hint, icon }) => (
-          <React.Fragment key={id}>
-            {moduleButton(
-              id,
-              label,
-              hint,
-              icon,
-              <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-slate-800 text-slate-500">
-                Soon
-              </span>
-            )}
-          </React.Fragment>
-        ))}
+        {moduleButton('revisions', 'ChangeLens', 'Browse & compare versions', GitCompareArrows)}
       </nav>
 
-      {/* Footer: runtime status + collapse */}
-      <div className="p-3 border-t border-boomi-cardBorder space-y-2">
-        <div
-          className={`group relative flex items-center gap-2.5 rounded-xl bg-slate-900/80 border border-slate-800 ${
-            isCollapsed ? 'justify-center p-2' : 'px-3 py-2'
-          }`}
-        >
-          <Server className={`w-4 h-4 shrink-0 ${isOnline ? 'text-emerald-400' : 'text-amber-400'}`} />
-          {!isCollapsed && (
-            <div className="min-w-0 flex-1">
-              <div className="text-[11px] text-slate-300 font-medium truncate" title={atom?.name}>
-                {atom?.name || 'Runtime Atom'}
-              </div>
-              <div className={`flex items-center gap-1 text-[10px] font-semibold ${isOnline ? 'text-emerald-400' : 'text-amber-400'}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-                {atom?.status || 'UNKNOWN'}
-              </div>
-            </div>
-          )}
-          <Tooltip label={`${atom?.name || 'Runtime Atom'} · ${atom?.status || 'UNKNOWN'}`} show={isCollapsed} />
-        </div>
-
+      {/* Footer: collapse */}
+      <div className="p-3">
         <button
           onClick={toggleCollapsed}
           title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}

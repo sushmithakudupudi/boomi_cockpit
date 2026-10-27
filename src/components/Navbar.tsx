@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { 
   Bot, 
-  ChevronRight,
   Search, 
   RefreshCw,
   LogOut,
@@ -12,6 +11,7 @@ import {
 } from 'lucide-react';
 import type { AtomHealth, ExecutionRecord } from '../types/boomi';
 import { AlertsBell } from './AlertsBell';
+import { useElementWidth } from '../hooks/useElementWidth';
 import { useTheme, type Theme } from '../hooks/useTheme';
 import { useAuth } from './auth/AuthContext';
 
@@ -40,14 +40,16 @@ const UserMenu: React.FC = () => {
   return (
     <div ref={ref} className="relative">
       <button onClick={() => setOpen((v) => !v)} aria-haspopup="menu" aria-expanded={open} aria-label="Account menu" title={user.email}
-        className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-slate-700 to-slate-800 border border-slate-600 text-[11px] font-bold text-slate-100 hover:border-boomi-accent transition cursor-pointer">
+        className="relative flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-slate-700 to-slate-800 border border-slate-600 text-[11px] font-bold text-slate-100 hover:border-boomi-accent transition cursor-pointer">
         {initials}
+        <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-boomi-dark" title="Online" aria-hidden="true" />
       </button>
       {open && (
         <div role="menu" className="absolute right-0 mt-2 w-64 rounded-2xl bg-boomi-card border border-boomi-cardBorder shadow-2xl shadow-black/40 p-2 z-50">
           <div className="px-3 py-2.5">
             <div className="text-sm font-semibold text-white truncate">{name}</div>
             <div className="text-xs text-slate-400 truncate">{user.email}</div>
+            <div className="flex items-center gap-1.5 mt-1 text-[11px] text-emerald-400"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />Online</div>
             <span className="inline-block mt-1.5 px-2 py-0.5 rounded-full bg-sky-500/10 border border-sky-500/30 text-[10px] font-bold uppercase tracking-wide text-sky-300">{user.role}</span>
           </div>
           <div className="h-px bg-boomi-cardBorder my-1" />
@@ -85,8 +87,6 @@ interface NavbarProps {
   isBackendConnected?: boolean;
   atom?: AtomHealth;
   onRefresh?: () => void;
-  sectionLabel: string;
-  pageLabel: string;
   activeModule?: string;
   onSelectModule?: (mod: 'healing' | 'compiler') => void;
   failures?: ExecutionRecord[];
@@ -101,8 +101,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   onToggleCompanion,
   companionUnreadCount,
   onRefresh,
-  sectionLabel,
-  pageLabel,
   activeModule,
   onSelectModule,
   failures = [],
@@ -111,28 +109,23 @@ export const Navbar: React.FC<NavbarProps> = ({
   onMarkAllRead = () => {},
   onOpenNav,
 }) => {
+  const [barRef, barWidth] = useElementWidth<HTMLElement>();
+
   return (
-    <header className="sticky top-0 z-30 w-full bg-boomi-dark/95 border-b border-boomi-cardBorder backdrop-blur-md">
+    <header ref={barRef} className="sticky top-0 z-30 w-full bg-boomi-dark">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2 sm:gap-4">
         
-        {/* Breadcrumb: current module / page */}
+        {/* Left: menu button on small screens (each page shows its own module heading) */}
         <div className="flex flex-1 basis-0 items-center gap-2 min-w-0 text-xs">
           {onOpenNav && (
             <button onClick={onOpenNav} aria-label="Open menu" className="md:hidden -ml-1 p-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 transition cursor-pointer shrink-0">
               <Menu className="w-5 h-5" />
             </button>
           )}
-          {sectionLabel !== pageLabel && (
-            <>
-              <span className="hidden sm:inline text-slate-500 font-medium whitespace-nowrap">{sectionLabel}</span>
-              <ChevronRight className="hidden sm:block w-3.5 h-3.5 text-slate-600 shrink-0" />
-            </>
-          )}
-          <span className="text-white font-bold truncate whitespace-nowrap">{pageLabel}</span>
         </div>
 
         {/* Center: search (left and right columns share the remaining width equally, so this stays centred) */}
-        <div className="relative hidden xl:block w-full max-w-sm 2xl:max-w-md">
+        <div className={`relative w-full max-w-sm 2xl:max-w-md ${barWidth >= 1000 ? 'block' : 'hidden'}`}>
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
@@ -184,7 +177,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             className="flex items-center gap-2 px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-boomi-blue to-sky-500 hover:from-blue-600 hover:to-sky-400 text-white text-xs font-semibold shadow-lg shadow-sky-500/25 border border-sky-400/40 transition-all cursor-pointer"
           >
             <Bot className="w-4 h-4" />
-            <span className="hidden sm:inline whitespace-nowrap">Boomi Companion</span>
+            <span className={`whitespace-nowrap ${barWidth >= 640 ? 'inline' : 'hidden'}`}>Keystone AI</span>
             {companionUnreadCount > 0 && (
               <span className="w-5 h-5 rounded-full bg-rose-600 text-white text-[10px] font-bold flex items-center justify-center">
                 {companionUnreadCount}

@@ -1,12 +1,8 @@
 import React from 'react';
 import type { ExecutionRecord } from '../types/boomi';
 import { ExecutionTable } from './ExecutionTable';
-import { 
-  ArrowLeft, 
-  Server, 
-  RefreshCw, 
-  Layers
-} from 'lucide-react';
+import { HeartPulse, RefreshCw, Layers } from 'lucide-react';
+import { PageHeader } from './PageHeader';
 
 interface ProcessReportingPageProps {
   executions: ExecutionRecord[];
@@ -33,53 +29,30 @@ export const ProcessReportingPage: React.FC<ProcessReportingPageProps> = ({
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Page Header with Back Button & Breadcrumbs */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-boomi-cardBorder">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onBackToCockpit}
-            className="p-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 transition cursor-pointer shadow-sm group"
-            title="Return to Live Cockpit"
-          >
-            <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
-          </button>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-lg font-bold text-white">Process Reporting: All Executions</h1>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-boomi-blue/20 text-boomi-accent border border-boomi-blue/40 font-semibold">
-                Historical Audit Feed
-              </span>
-            </div>
-            <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-2">
-              <span>Dell Boomi AtomSphere API Live Execution Stream</span>
-              <span>•</span>
-              <span className="flex items-center gap-1 text-slate-300">
-                <Server className="w-3 h-3 text-emerald-400" />
-                {atomName}
-              </span>
-            </p>
-          </div>
-        </div>
-
-        {/* Action Controls */}
-        <div className="flex items-center gap-2.5">
-          <button
-            onClick={onBackToCockpit}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-semibold border border-slate-700 transition cursor-pointer"
-          >
-            <Layers className="w-3.5 h-3.5 text-sky-400" />
-            <span>Interactive Canvas</span>
-          </button>
-
-          <button
-            onClick={onRefresh}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-semibold border border-slate-700 transition cursor-pointer"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>Refresh API</span>
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        icon={HeartPulse}
+        title="HealIQ"
+        description={<>Process reporting · every execution from the Boomi AtomSphere API on <span className="text-slate-300 font-medium">{atomName}</span></>}
+        actions={
+          <>
+            <button
+              onClick={onBackToCockpit}
+              title="Return to Live Cockpit"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-semibold border border-slate-700 transition cursor-pointer"
+            >
+              <Layers className="w-3.5 h-3.5 text-sky-400" />
+              <span>Live Cockpit</span>
+            </button>
+            <button
+              onClick={onRefresh}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-semibold border border-slate-700 transition cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Refresh</span>
+            </button>
+          </>
+        }
+      />
 
       {/* Summary Stat Pills */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

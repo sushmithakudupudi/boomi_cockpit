@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertCircle, ArrowRight, Bot, Check, Eye, EyeOff, GitCompareArrows, HeartPulse, Info, Loader2, Lock, Mail, ShieldCheck, User, Wand2 } from 'lucide-react';
+import { AlertCircle, ArrowRight, Check, Eye, EyeOff, GitCompareArrows, HeartPulse, Info, Loader2, Lock, Mail, ShieldCheck, User, Wand2 } from 'lucide-react';
 import { authApi } from '../../services/auth';
 import type { ApiError } from '../../services/api';
 import { ThemeSwitch } from '../Navbar';
@@ -20,9 +20,9 @@ const Field: React.FC<{ label: string; icon: React.ElementType; children: React.
 );
 
 const FEATURES = [
-  { icon: HeartPulse, title: 'HealIQ', text: 'Triage failed executions and reprocess them with the Companion.' },
+  { icon: HeartPulse, title: 'HealIQ', text: 'Triage failed executions and reprocess them with Keystone AI.' },
   { icon: Wand2, title: 'ArchForge', text: 'Turn a whiteboard flow into a dependency-ordered build plan.' },
-  { icon: GitCompareArrows, title: 'RevIQ', text: 'RevIQ — see exactly what changed between any two component versions.' },
+  { icon: GitCompareArrows, title: 'ChangeLens', text: 'ChangeLens — see exactly what changed between any two component versions.' },
 ];
 
 export const LoginPage: React.FC<SignInScreenProps> = ({ setupRequired, notice, error: initialError, onSignedIn }) => {
@@ -67,8 +67,8 @@ export const LoginPage: React.FC<SignInScreenProps> = ({ setupRequired, notice, 
         <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-boomi-accent/10 blur-3xl" aria-hidden="true" />
         <div className="absolute -bottom-32 -left-16 w-80 h-80 rounded-full bg-purple-500/10 blur-3xl" aria-hidden="true" />
         <div className="relative flex items-center gap-3">
-          <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-tr from-boomi-blue to-boomi-accent shadow-lg shadow-sky-500/20">
-            <Bot className="w-5 h-5 text-white" />
+          <div className="flex items-center justify-center w-10 h-10 p-0.5 rounded-xl bg-[#ffffff] border border-boomi-cardBorder shadow-sm">
+            <img src="/esi-logo.png" alt="ESI" className="w-full h-full object-contain" />
           </div>
           <div>
             <div className="text-base font-bold text-white">BoomiOps</div>
@@ -99,7 +99,7 @@ export const LoginPage: React.FC<SignInScreenProps> = ({ setupRequired, notice, 
       <main className="flex-1 flex flex-col">
         <div className="flex items-center justify-between p-4 sm:p-6">
           <div className="flex lg:invisible items-center gap-2">
-            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-tr from-boomi-blue to-boomi-accent"><Bot className="w-4 h-4 text-white" /></div>
+            <div className="flex items-center justify-center w-8 h-8 p-0.5 rounded-lg bg-[#ffffff] border border-boomi-cardBorder"><img src="/esi-logo.png" alt="ESI" className="w-full h-full object-contain" /></div>
             <span className="text-sm font-bold text-white">BoomiOps</span>
           </div>
           <ThemeSwitch />

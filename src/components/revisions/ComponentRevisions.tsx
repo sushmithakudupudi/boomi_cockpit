@@ -4,7 +4,9 @@ import { api, ApiError } from '../../services/api';
 import type { ComparisonResult, ComponentRevision, RevisionSource } from '../../types/revisions';
 import { DiffView } from './DiffView';
 import { Avatar, EmptyState, ErrorState, SourceBanner, Spinner, TypeBadge } from './shared';
-import { formatDate, inputCls, relativeTime } from './utils';
+import { Select } from '../ui/Select';
+import { formatDate, relativeTime } from './utils';
+import { useElementWidth } from '../../hooks/useElementWidth';
 
 interface Props {
   source: RevisionSource;
@@ -42,6 +44,10 @@ export const ComponentRevisions: React.FC<Props> = ({ source, component, onBack,
   const [includeUnchanged, setIncludeUnchanged] = useState(false);
   const [reload, setReload] = useState(0);
   const [retry, setRetry] = useState(0);
+  // Lay out by the width this view really has (the Companion drawer can take a big share of the screen).
+  const [layoutRef, layoutWidth] = useElementWidth<HTMLDivElement>();
+  const sideBySide = layoutWidth >= 900;
+  const pickersInline = layoutWidth >= 560;
 
   useEffect(() => {
     let cancelled = false;
@@ -126,22 +132,23 @@ export const ComponentRevisions: React.FC<Props> = ({ source, component, onBack,
           {/* Compare bar */}
           {revisions.length >= 2 && (
             <div className="p-3 rounded-2xl bg-boomi-card border border-boomi-cardBorder space-y-2.5">
-              <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] gap-2 items-end">
+              <div className={`grid gap-2 items-end ${pickersInline ? 'grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]' : 'grid-cols-1'}`}>
                 {(['from', 'to'] as const).map((w, i) => (
                   <React.Fragment key={w}>
                     {i === 1 && (
                       <button onClick={swap} title="Swap base and target" aria-label="Swap base and target"
-                        className="justify-self-center p-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-400 hover:text-white hover:border-slate-500 transition cursor-pointer rotate-90 md:rotate-0">
+                        className={`justify-self-center p-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-400 hover:text-white hover:border-slate-500 transition cursor-pointer ${pickersInline ? '' : 'rotate-90'}`}>
                         <ArrowLeftRight className="w-4 h-4" />
                       </button>
                     )}
-                    <label className="block min-w-0 text-[10px] uppercase tracking-wider font-bold space-y-1">
-                      <span className={w === 'from' ? 'text-rose-300' : 'text-emerald-300'}>{w === 'from' ? 'Base (compare from)' : 'Target (compare to)'}</span>
-                      <select value={(w === 'from' ? from : to) ?? ''} onChange={(e) => (w === 'from' ? setFrom : setTo)(Number(e.target.value))}
-                        className={`${inputCls} w-full normal-case tracking-normal font-normal ${w === 'from' ? 'border-rose-500/40' : 'border-emerald-500/40'}`}>
-                        {revisions.map((r) => <option key={r.version} value={r.version}>{revLabel(r)}</option>)}
-                      </select>
-                    </label>
+                    <Select
+                      label={w === 'from' ? 'Base (compare from)' : 'Target (compare to)'}
+                      tone={w === 'from' ? 'rose' : 'emerald'}
+                      value={(w === 'from' ? from : to) ?? -1}
+                      onChange={(v) => (w === 'from' ? setFrom : setTo)(v)}
+                      options={revisions.map((r) => ({ value: r.version, label: revLabel(r), hint: r.currentVersion ? 'Current' : undefined }))}
+                      className="mt-2"
+                    />
                   </React.Fragment>
                 ))}
               </div>
@@ -164,14 +171,14 @@ export const ComponentRevisions: React.FC<Props> = ({ source, component, onBack,
             </div>
           )}
 
-          <div className="grid grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)] gap-4 items-start">
+          <div ref={layoutRef} className={`grid gap-4 items-start ${sideBySide ? 'grid-cols-[280px_minmax(0,1fr)]' : 'grid-cols-1'}`}>
             {/* Timeline */}
-            <aside className="rounded-2xl bg-boomi-card border border-boomi-cardBorder xl:sticky xl:top-4">
+            <aside className={`rounded-2xl bg-boomi-card border border-boomi-cardBorder ${sideBySide ? 'sticky top-4' : ''}`}>
               <div className="flex items-center justify-between px-4 py-3 border-b border-boomi-cardBorder">
                 <h3 className="text-xs font-bold text-white">Revision timeline</h3>
                 <span className="text-[10px] text-slate-500">newest first</span>
               </div>
-              <ol className="p-2 max-h-[320px] xl:max-h-[calc(100vh-10rem)] overflow-y-auto">
+              <ol className={`p-2 overflow-y-auto ${sideBySide ? 'max-h-[calc(100vh-10rem)]' : 'max-h-[320px]'}`}>
                 {revisions.map((r, idx) => {
                   const isFrom = r.version === from, isTo = r.version === to;
                   return (
@@ -198,7 +205,7 @@ export const ComponentRevisions: React.FC<Props> = ({ source, component, onBack,
                               );
                             })}
                             {canDocument && (
-                              <button onClick={() => onAiDocs?.(r)} title={`AI Docs: summarize v${r.version} with Boomi Companion`} aria-label={`AI Docs for v${r.version}`}
+                              <button onClick={() => onAiDocs?.(r)} title={`AI Docs: summarize v${r.version} with Keystone AI`} aria-label={`AI Docs for v${r.version}`}
                                 className="w-6 h-6 inline-flex items-center justify-center rounded-md border border-sky-500/40 bg-sky-500/10 text-sky-300 hover:bg-sky-500/25 hover:text-white transition cursor-pointer">
                                 <WandSparkles className="w-3 h-3" />
                               </button>
