@@ -15,6 +15,7 @@ from .routes import (
     topology,
     stats,
     system,
+    revisions,
 )
 from .services.boomi_service import boomi_service
 
@@ -93,6 +94,7 @@ app.include_router(atoms.router, prefix=settings.API_PREFIX)
 app.include_router(topology.router, prefix=settings.API_PREFIX)
 app.include_router(stats.router, prefix=settings.API_PREFIX)
 app.include_router(system.router, prefix=settings.API_PREFIX)
+app.include_router(revisions.router, prefix=settings.API_PREFIX)
 
 @app.get("/", include_in_schema=False)
 def root():

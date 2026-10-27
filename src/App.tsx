@@ -6,6 +6,7 @@ import { StatsOverview } from './components/StatsOverview';
 import { ProcessFlowGraph } from './components/ProcessFlowGraph';
 import { LiveProcessFeed } from './components/LiveProcessFeed';
 import { ProcessReportingPage } from './components/ProcessReportingPage';
+import { RevisionHistoryPage } from './components/revisions/RevisionHistoryPage';
 import { TriageModal } from './components/TriageModal';
 import { BoomiCompanionDrawer } from './components/BoomiCompanionDrawer';
 import { VisualArchitectureCompiler } from './components/VisualArchitectureCompiler';
@@ -248,13 +249,26 @@ export function App() {
         isBackendConnected={isBackendConnected}
         atom={atoms[0]}
         onRefresh={handleResetDemo}
+<<<<<<< HEAD
         sectionLabel={activeModule === 'compiler' ? 'ConnectCraft' : (activePlaceholder?.label ?? 'Self-Healing')}
+=======
+        sectionLabel={
+          activeModule === 'compiler' ? 'Visual Architecture'
+            : activeModule === 'revisions' ? 'Revision History'
+            : (activePlaceholder?.label ?? 'Self-Healing')
+        }
+>>>>>>> 2ac1acf885ac46620bb8c68ac20b8ebbae4d065d
         pageLabel={
           activeModule === 'healing'
             ? (activeTab === 'cockpit' ? 'Live Cockpit' : 'Process Reporting')
             : activeModule === 'compiler'
+<<<<<<< HEAD
               ? (compilerView === 'draft' ? 'Draft' : compilerView === 'sent' ? 'Sent' : compilerView === 'deleted' ? 'Deleted' : 'New')
               : 'Overview'
+=======
+              ? (compilerView === 'draft' ? 'Draft' : compilerView === 'sent' ? 'Sent' : 'New')
+              : activeModule === 'revisions' ? 'Revision History' : 'Overview'
+>>>>>>> 2ac1acf885ac46620bb8c68ac20b8ebbae4d065d
         }
       />
 
@@ -296,6 +310,8 @@ export function App() {
             <h2 className="text-sm font-bold text-white">{activePlaceholder.label}</h2>
             <p className="text-xs text-slate-400 mt-1">This section is coming soon.</p>
           </div>
+        ) : activeModule === 'revisions' ? (
+          <RevisionHistoryPage />
         ) : activeTab === 'cockpit' ? (
           <>
             {/* Banner Alert for real active error from Boomi platform */}
