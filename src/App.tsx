@@ -5,6 +5,7 @@ import { StatsOverview } from './components/StatsOverview';
 import { ProcessFlowGraph } from './components/ProcessFlowGraph';
 import { LiveProcessFeed } from './components/LiveProcessFeed';
 import { ProcessReportingPage } from './components/ProcessReportingPage';
+import { RevisionHistoryPage } from './components/revisions/RevisionHistoryPage';
 import { TriageModal } from './components/TriageModal';
 import { BoomiCompanionDrawer } from './components/BoomiCompanionDrawer';
 import { api } from './services/api';
@@ -165,11 +166,11 @@ export function App() {
         isBackendConnected={isBackendConnected}
         atom={atoms[0]}
         onRefresh={handleResetDemo}
-        sectionLabel={activePlaceholder?.label ?? 'Self-Healing'}
+        sectionLabel={activePlaceholder?.label ?? (activeModule === 'revisions' ? 'Revision History' : 'Self-Healing')}
         pageLabel={
           activeModule === 'healing'
             ? (activeTab === 'cockpit' ? 'Live Cockpit' : 'Process Reporting')
-            : 'Overview'
+            : activeModule === 'revisions' ? 'Revision History' : 'Overview'
         }
       />
 
@@ -185,6 +186,8 @@ export function App() {
             <h2 className="text-sm font-bold text-white">{activePlaceholder.label}</h2>
             <p className="text-xs text-slate-400 mt-1">This section is coming soon.</p>
           </div>
+        ) : activeModule === 'revisions' ? (
+          <RevisionHistoryPage />
         ) : activeTab === 'cockpit' ? (
           <>
             {/* Banner Alert for real active error from Boomi platform */}

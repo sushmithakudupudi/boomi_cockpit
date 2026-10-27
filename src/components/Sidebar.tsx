@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   Bot,
   HeartPulse,
-  Boxes,
+  GitCompareArrows,
   Layers3,
   LayoutDashboard,
   ListFilter,
@@ -13,12 +13,11 @@ import {
 } from 'lucide-react';
 import type { AtomHealth } from '../types/boomi';
 
-export type AppModule = 'healing' | 'module2' | 'module3';
+export type AppModule = 'healing' | 'revisions' | 'module3';
 export type HealingTab = 'cockpit' | 'reporting';
 
 // Placeholder modules — rename / fill in as each one gets built
-export const PLACEHOLDER_MODULES: { id: Exclude<AppModule, 'healing'>; label: string; hint: string; icon: React.ElementType }[] = [
-  { id: 'module2', label: 'New Module', hint: 'Coming soon', icon: Boxes },
+export const PLACEHOLDER_MODULES: { id: Exclude<AppModule, 'healing' | 'revisions'>; label: string; hint: string; icon: React.ElementType }[] = [
   { id: 'module3', label: 'New Module 2', hint: 'Coming soon', icon: Layers3 },
 ];
 
@@ -209,6 +208,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             })}
           </div>
         )}
+
+        {moduleButton('revisions', 'Revision History', 'Browse & compare versions', GitCompareArrows)}
 
         {PLACEHOLDER_MODULES.map(({ id, label, hint, icon }) => (
           <React.Fragment key={id}>

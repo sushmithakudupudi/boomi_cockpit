@@ -1,7 +1,46 @@
 import type { ExecutionRecord, AtomHealth, CompanionMessage } from '../types/boomi';
+import type {
+  ComponentFilters,
+  ComponentListResponse,
+  ComponentRevision,
+  ComparisonResult,
+  RevisionSource,
+  RevisionStatus,
+} from '../types/revisions';
 import { mockExecutions, mockAtoms, initialProcessNodes, initialProcessEdges } from '../data/mockData';
 
 const BASE_URL = '/api';
+
+/** Error carrying the backend's code/message so the UI can explain exactly what failed. */
+export class ApiError extends Error {
+  code: string;
+  status: number;
+  constructor(message: string, code = 'error', status = 0) {
+    super(message);
+    this.code = code;
+    this.status = status;
+  }
+}
+
+// Revision endpoints never fall back to mock data: failures must reach the UI.
+async function revisionRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}/revisions${path}`, init);
+  } catch {
+    throw new ApiError('The BoomiOps backend is unreachable. Start it with `npm run backend` and retry.', 'backend_unreachable');
+  }
+  if (!res.ok) {
+    let detail: { code?: string; message?: string } = {};
+    try {
+      detail = (await res.json()).detail ?? {};
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new ApiError(detail.message || `Request failed (HTTP ${res.status}).`, detail.code || 'error', res.status);
+  }
+  return res.json();
+}
 
 export interface StatsData {
   totalExecutions: number;
@@ -176,4 +215,28 @@ export const api = {
     if (!res.ok) throw new Error(`HTTP error ${res.status}`);
     return await res.json();
   },
+
+  // 11. Revision History (read-only; throws ApiError, never returns mock data)
+  fetchRevisionStatus: () => revisionRequest<RevisionStatus>('/status'),
+
+  fetchRevisionComponents(source: RevisionSource, f: ComponentFilters, refresh = false) {
+    const p = new URLSearchParams({ source, q: f.q, type: f.type, author: f.author, dateFrom: f.dateFrom, dateTo: f.dateTo });
+    if (refresh) p.set('refresh', 'true');
+    return revisionRequest<ComponentListResponse>(`/components?${p}`);
+  },
+
+  fetchComponentRevisions: (source: RevisionSource, componentId: string) =>
+    revisionRequest<{ revisions: ComponentRevision[] }>(`/components/${encodeURIComponent(componentId)}/revisions?source=${source}`),
+
+  compareRevisions: (source: RevisionSource, componentId: string, fromVersion: number, toVersion: number, includeUnchanged: boolean) =>
+    revisionRequest<ComparisonResult>(
+      `/components/${encodeURIComponent(componentId)}/compare?source=${source}&fromVersion=${fromVersion}&toVersion=${toVersion}&includeUnchanged=${includeUnchanged}`
+    ),
+
+  compareUploadedXml: (leftXml: string, rightXml: string, leftLabel: string, rightLabel: string, includeUnchanged: boolean) =>
+    revisionRequest<ComparisonResult>('/compare-xml', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ leftXml, rightXml, leftLabel, rightLabel, includeUnchanged }),
+    }),
 };
