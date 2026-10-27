@@ -141,11 +141,11 @@ export const api = {
       const data = await res.json();
       return data.message;
     } catch (err) {
-      console.warn('Backend /api/companion/chat unreachable, generating fallback response:', err);
+      console.warn('Backend /api/companion/chat unreachable:', err);
       return {
         id: `comp-${Date.now()}`,
         sender: 'companion',
-        text: `🔍 **Boomi Companion:** I've analyzed your request: "${prompt}". Currently processing telemetry across Atoms.`,
+        text: 'Boomi Companion could not reach its chat service, so I could not check your request or current account data. Please try again when the connection is restored.',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
     }

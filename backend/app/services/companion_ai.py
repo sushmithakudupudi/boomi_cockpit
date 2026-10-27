@@ -128,7 +128,10 @@ OUTPUT CONVENTIONS:
 - If recommending an immediate action, append an action tag at the very end of your response:
   [ACTION:VIEW_FLOW:processId:Inspect Process Topology Flow]
   OR [ACTION:INSPECT_PAYLOAD:executionId:Triage Failed Execution]
-- Be concise, authoritative, and helpful."""
+- Answer only what was asked. Treat account data and tool outputs as the source of truth; when data is insufficient, say what is missing and ask one focused follow-up. Never invent processes, errors, metrics, configuration, or actions.
+- Do not infer a root cause from an error summary alone. Distinguish observed facts from hypotheses and label any hypothesis.
+- Emit action tags only for an exact process or execution returned by a tool in this turn. Never attach an action to a merely similar or latest record.
+- Be concise, precise, and helpful."""
 
         # Let the model call the read-only account tools, then answer from their results
         messages: list = [
@@ -179,13 +182,10 @@ OUTPUT CONVENTIONS:
             )
             # Clean action tag from user-facing text
             raw_text = re.sub(r'\[ACTION:[^\]]+\]', '', raw_text).strip()
-        elif failed_execs and ("fail" in prompt.lower() or "error" in prompt.lower() or "heal" in prompt.lower() or "reprocess" in prompt.lower() or "triage" in prompt.lower()):
-            fe = failed_execs[0]
-            suggested_action = SuggestedAction(
-                type="VIEW_FLOW",
-                label=f"Inspect Process: {fe['processName']}",
-                executionId=fe['id']
-            )
+        if suggested_action and suggested_action.executionId and suggested_action.type in ("VIEW_FLOW", "INSPECT_PAYLOAD", "REPROCESS"):
+            known_ids = {str(e.get("id")) for e in executions}
+            if str(suggested_action.executionId) not in known_ids:
+                suggested_action = None
 
         # Extract Mermaid code block if present
         code_block = None
@@ -207,78 +207,66 @@ OUTPUT CONVENTIONS:
 
     def _generate_fallback_chat(self, prompt: str, now_time: str, msg_id: str) -> CompanionMessage:
         query = prompt.strip().lower()
-        executions = boomi_service.get_executions()
-        failed_execs = [e for e in executions if e.get("status") == "ERROR"]
+        executions = boomi_service.get_executions(limit=50)
+        failed_execs = [e for e in executions if e.get("status") == "ERROR" and not e.get("reprocessed")]
 
-        if "build" in query or "create" in query or ("xml" in query and "json" in query):
+        if any(term in query for term in ("build", "create", "design", "new process")):
             return CompanionMessage(
                 id=msg_id,
                 sender="companion",
                 text=(
-                    "To create a Boomi process that maps employee data from XML to JSON, follow these structured steps:\n\n"
-                    "### **1. Create a New Process**\n"
-                    "- Log in to your Boomi AtomSphere account.\n"
-                    "- Destination folder: `Training-Sai Nikhil-Badathala`\n"
-                    "- Proposed Process Name: `Employee_XML_to_JSON_Mapper`\n\n"
-                    "### **2. Configure the Start Shape**\n"
-                    "- **Start Shape**: Inbound XML Feed (e.g. No Data / Web Services Server / Disk).\n"
-                    "- Configure the source to receive the XML employee document payload.\n\n"
-                    "### **3. Add a Data Process / Map Shape**\n"
-                    "- Add a **Data Process Shape** (Processing Step: `XML to JSON`) or a **Map Shape** with Source XML Profile and Target JSON Profile.\n"
-                    "- Map employee fields (`id` ➔ `employeeId`, `firstName` ➔ `first_name`, `email` ➔ `work_email`).\n\n"
-                    "### **4. Configure the Stop Shape**\n"
-                    "- End the execution and return the transformed JSON document.\n\n"
-                    "---\n"
-                    "**Would you like me to proceed with building this directly into your Dell Boomi AtomSphere account, or do you have any modifications?**"
+                    "I can help plan a Boomi process, but I need the source, destination, data format, and any transformation or validation rules to propose accurate shapes. "
+                    "You can then review the design in ConnectCraft and build it there."
                 ),
                 timestamp=now_time,
-                suggestedAction=SuggestedAction(
-                    type="BUILD_PROCESS",
-                    label="🚀 Proceed & Build in Boomi",
-                    executionId="Employee_XML_to_JSON_Mapper"
-                ),
-                codeBlock=CodeBlock(
-                    language="mermaid",
-                    code=(
-                        "graph LR\n"
-                        "    A[Start: Inbound XML] --> B[Data Process: XML to JSON]\n"
-                        "    B --> C[Stop: Return JSON Document]"
-                    )
-                )
             )
 
-        if "modbus" in query or "fail" in query or "error" in query:
-            fe = failed_execs[0] if failed_execs else None
-            p_name = fe["processName"] if fe else "Modbus_Read_Test_Process"
-            err = fe.get("errorMessage", "Object IDs are required") if fe else "Object IDs are required."
+        if any(term in query for term in ("fail", "error", "incident", "triage", "reprocess")):
+            matching_failure = next((e for e in failed_execs if str(e.get("id", "")).lower() in query or str(e.get("processName", "")).lower() in query), None)
+            if not failed_execs:
+                return CompanionMessage(id=msg_id, sender="companion", text="I don't see an unreprocessed failed execution in the available execution data, so I can't identify a root cause. Share the process name or execution ID to narrow this down.", timestamp=now_time)
+            if any(term in query for term in ("process", "execution", " in ")) and matching_failure is None:
+                return CompanionMessage(id=msg_id, sender="companion", text="I found failed executions, but none matched the process name or execution ID in your question. Please check the identifier or share the exact execution ID.", timestamp=now_time)
+            fe = matching_failure or failed_execs[0]
+            p_name = fe.get("processName") or "Unnamed process"
+            err = fe.get("errorMessage")
+            error_text = f"• **Reported error:** `{err}`\n" if err else "• **Reported error:** No error message is available in this execution record.\n"
             return CompanionMessage(
                 id=msg_id,
                 sender="companion",
                 text=(
-                    f"🔍 **Analysis of Execution Error ({p_name}):**\n\n"
-                    f"• **Failure Detail:** `{err}`\n"
-                    f"• **Root Cause:** Connector shape attempted to execute without an input document containing Object IDs or ID parameters.\n"
-                    f"• **Remediation:** Configure upstream Shape parameters or inject input document into the Modbus read connector."
+                    f"🔍 **Failed execution ({p_name}):**\n\n"
+                    f"{error_text}"
+                    "The execution record alone does not establish root cause. Inspect the failing shape and input document before applying a fix."
                 ),
                 timestamp=now_time,
                 suggestedAction=SuggestedAction(
                     type="VIEW_FLOW",
-                    label=f"Inspect Topology: {p_name}",
-                    executionId=fe["id"] if fe else None
+                    label=f"Inspect execution: {p_name}",
+                    executionId=fe.get("id")
                 )
             )
 
-        stats = boomi_service.get_stats()
-        atoms = boomi_service.get_atoms()
-        atom_name = atoms[0]["name"] if atoms else "ESI-PC16.easystepin.com"
+        if any(term in query for term in ("health", "status", "success rate", "how many executions")):
+            stats = boomi_service.get_stats()
+            return CompanionMessage(
+                id=msg_id,
+                sender="companion",
+                text=(
+                    f"**Available execution summary**\n\n"
+                    f"- Success rate: {stats['successRatePercent']}% across {stats['totalExecutions']} executions.\n"
+                    f"- Failed executions: {stats['failedCount']}.\n\n"
+                    "This is the execution summary available to the app; it does not confirm live Atom connectivity."
+                ),
+                timestamp=now_time,
+            )
+
         return CompanionMessage(
             id=msg_id,
             sender="companion",
             text=(
-                f"🤖 **Boomi Companion AI Operations Copilot**\n\n"
-                f"Connected to AtomSphere tenant `{settings.BOOMI_ACCOUNT_ID}` on Atom `{atom_name}` (ONLINE).\n\n"
-                f"• **Platform Health:** {stats['successRatePercent']}% success rate across {stats['totalExecutions']} executions.\n"
-                f"• **Active Alerts:** {stats['failedCount']} error execution requiring investigation."
+                "I can't give a reliable answer to that question because the AI service is unavailable and it doesn't match the local failure-summary fallback. "
+                "Try again when the AI service is available, or ask about a specific failure using its process name or execution ID."
             ),
             timestamp=now_time
         )

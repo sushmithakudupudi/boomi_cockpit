@@ -1005,7 +1005,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
             </div>
           </div>
 
-          {/* Right Column: Compiler Status & 15-Gate Dependency Order */}
+          {/* Right Column: Compiler Status & Blueprint Plan */}
           <div className="lg:col-span-5 rounded-2xl bg-slate-900/90 border border-slate-800 p-5 shadow-xl flex flex-col justify-between">
             <div className="space-y-4">
               
@@ -1026,14 +1026,14 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
                 </span>
               </div>
 
-              {/* Metric Cards (COMPONENTS, GATES, STAGES) */}
+              {/* Metric Cards (PLAN ITEMS, GATES, STAGES) */}
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div className="rounded-xl bg-slate-950/80 border border-slate-800 p-2.5">
-                  <div className="text-[10px] uppercase font-bold text-slate-500">COMPONENTS</div>
+                  <div className="text-[10px] uppercase font-bold text-slate-500">PLAN ITEMS</div>
                   <div className="text-lg font-extrabold text-white">{String(jobBreakdown.length).padStart(2, '0')}</div>
                 </div>
                 <div className="rounded-xl bg-slate-950/80 border border-slate-800 p-2.5">
-                  <div className="text-[10px] uppercase font-bold text-slate-500">GATES</div>
+                  <div className="text-[10px] uppercase font-bold text-slate-500">PLAN STEPS</div>
                   <div className="text-lg font-extrabold text-purple-300">{includedGateCount}</div>
                 </div>
                 <div className="rounded-xl bg-slate-950/80 border border-slate-800 p-2.5">
@@ -1047,8 +1047,8 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
               {/* Dependency Order Timeline */}
               <div>
                 <div className="flex items-center justify-between text-xs font-bold text-slate-400 mb-2">
-                  <span className="tracking-wider uppercase text-[11px]">DEPENDENCY ORDER</span>
-                  <span className="text-purple-300 font-mono text-[11px]">{includedGateCount} / {gates.length} GATES</span>
+                  <span className="tracking-wider uppercase text-[11px]">IMPLEMENTATION PLAN</span>
+                  <span className="text-purple-300 font-mono text-[11px]">{gates.length} PLAN STEPS</span>
                 </div>
 
                 <div className="space-y-1.5 max-h-[380px] overflow-y-auto pr-1">
@@ -1081,7 +1081,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
                               {gate.namespace}
                             </span>
                             {gate.included
-                              ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                              ? <span className="text-[9px] font-mono text-sky-300 shrink-0">PLANNED</span>
                               : <span className="text-[9px] font-mono text-slate-500 shrink-0">OFF</span>}
                           </div>
                         </div>

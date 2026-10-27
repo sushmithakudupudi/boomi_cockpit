@@ -314,86 +314,44 @@ const describeStage = (stage: Stage, businessRule: string): string[] => {
 };
 
 export const generateJobBreakdown = (config: BlueprintConfig): JobBreakdownItem[] => {
-  const ctx = buildContext(config);
-  const { settings } = config;
-  const src = slug(ctx.sourceName);
-  const tgt = slug(ctx.targetName);
-  const folderRoot = `#Development/${slug(config.title) || 'Integration'}`;
-  const profileType = ctx.source?.details?.profileType || 'JSON';
+  const processTitle = config.title.trim() || 'Untitled integration';
+  const stageItems = config.stages.map((stage, index): JobBreakdownItem => {
+    const shape = stage.selectedShapeOrConnector || 'Unspecified shape';
+    const isConnector = (stage.category === 'SOURCE SYSTEM' || stage.category === 'DESTINATION')
+      && !['Start - No Data', 'Stop', 'Return Documents'].includes(shape);
+    const detailParts = [
+      stage.details?.connectorType ? `Connector: ${stage.details.connectorType}` : null,
+      stage.details?.action ? `Action: ${stage.details.action}` : null,
+      stage.details?.objectName ? `Object: ${stage.details.objectName}` : null,
+      stage.details?.profileType ? `Profile: ${stage.details.profileType}` : null,
+      stage.details?.batchSize ? `Batch size: ${stage.details.batchSize}` : null,
+    ].filter((part): part is string => Boolean(part));
+    const purpose = [
+      stage.notes?.trim() ? `Configured notes: ${stage.notes.trim()}` : `Use the ${shape} shape as listed in the blueprint.`,
+      ...detailParts,
+    ].join(' · ');
 
-  const processShapes = [`Start Shape (${ctx.sourceName})`];
-  if (settings.enableDocumentSplitCombine) processShapes.push('Data Process (Split Documents)');
-  if (settings.enableTryCatchBoundary) processShapes.push('Try/Catch Shape');
-  if (settings.separateDPPvsDDP) processShapes.push('Set Properties (DPP/DDP)');
-  ctx.middleware.forEach(m => processShapes.push(m.selectedShapeOrConnector));
-  processShapes.push(`${ctx.targetName} Connector`, ctx.isListener ? 'Return Documents' : 'Stop');
-
-  const items: JobBreakdownItem[] = [
-    {
-      id: 'jb-01',
-      componentType: 'Integration Process',
-      name: `PRC_${src}_to_${tgt}_Sync`,
-      boomiFolder: `${folderRoot}/Processes`,
-      purpose: `Master pipeline from ${ctx.sourceName} to ${ctx.targetName} across ${config.stages.length} stages.`,
-      shapesInvolved: processShapes,
-    },
-    {
-      id: 'jb-02',
-      componentType: 'Profiles & Data Schemas',
-      name: `${profileType}_Source_${src}_Profile & ${tgt}_Target_Profile`,
-      boomiFolder: `${folderRoot}/Profiles`,
-      purpose: 'Authoritative data contracts defining fields, repeating elements, data types and required constraints.',
-      shapesInvolved: [`${profileType} Profile`, `${ctx.targetName} Object Profile`, ...(settings.enableTryCatchBoundary ? ['Error Payload Profile'] : [])],
-    },
-  ];
-
-  if (ctx.middleware.some(m => m.selectedShapeOrConnector === 'Map & transform') || ctx.middleware.length === 0) {
-    items.push({
-      id: 'jb-03',
-      componentType: 'Boomi Map & Transformations',
-      name: `MAP_${src}_to_${tgt}_Mapping`,
-      boomiFolder: `${folderRoot}/Maps`,
-      purpose: ctx.hasRule ? `Field-level translation rules for "${ctx.businessRule}".` : 'Field-level translation rules between source and target profiles.',
-      shapesInvolved: [
-        'Map Component',
-        ...(ctx.mentionsEmail ? ['String Lowercase Map Function'] : []),
-        'Date Mask Formatter',
-        'Cross-Reference Lookup',
-      ],
-    });
-  }
-
-  items.push({
-    id: 'jb-04',
-    componentType: 'Connector Operations & Connections',
-    name: `CONN_${src}_Read & CONN_${tgt}_${ctx.action}`,
-    boomiFolder: `${folderRoot}/Connections`,
-    purpose: [
-      'Isolated sandbox connections',
-      settings.enable3xExponentialRetry ? 'with 3x exponential retry' : null,
-      `batch size ${ctx.batchSize}`,
-      settings.enforceIdempotentUpsert ? 'and external-ID matching' : null,
-    ].filter(Boolean).join(', ') + '.',
-    shapesInvolved: [`${ctx.sourceName} Connector Operation`, `${ctx.targetName} ${ctx.action} Operation`, 'Connection Pool Config'],
+    return {
+      id: `stage-${stage.id || index + 1}`,
+      componentType: isConnector ? 'Planned connector shape' : 'Planned process shape',
+      name: stage.label?.trim() || shape,
+      boomiFolder: 'Unassigned until build target is selected',
+      purpose,
+      shapesInvolved: [shape],
+    };
   });
 
-  if (settings.separateDPPvsDDP || settings.enableTryCatchBoundary) {
-    items.push({
-      id: 'jb-05',
-      componentType: 'Dynamic Property Dictionary & Error DLQ',
-      name: `PROPS_${config.blueprintId}_Dictionary`,
-      boomiFolder: `${folderRoot}/Properties`,
-      purpose: settings.separateDPPvsDDP
-        ? 'Strict separation of DPP_* (process scope) and DDP_* (document scope) properties.'
-        : 'Error context properties and dead-letter handling.',
-      shapesInvolved: [
-        'Set Properties Shape',
-        ...(settings.enableTryCatchBoundary ? ['Notify Shape', 'Catch Branch Message Shape'] : []),
-      ],
-    });
-  }
-
-  return items;
+  return [
+    {
+      id: 'process-canvas',
+      componentType: 'Planned integration process',
+      name: processTitle,
+      boomiFolder: 'Unassigned until build target is selected',
+      purpose: `Process plan containing ${config.stages.length} saved canvas stage${config.stages.length === 1 ? '' : 's'}. This breakdown does not imply that separate profiles, maps, connections, or supporting components were created.`,
+      shapesInvolved: config.stages.map(stage => `${stage.label || 'Untitled stage'} (${stage.selectedShapeOrConnector || 'Unspecified shape'})`),
+    },
+    ...stageItems,
+  ];
 };
 
 export const generateGates = (config: BlueprintConfig): GateItem[] => {
@@ -418,64 +376,60 @@ export const generateGates = (config: BlueprintConfig): GateItem[] => {
     boomiArtifacts,
   });
 
-  return [
-    gate(1, 'Inspect and document the current development landscape', 'boomi / inspect / dev',
-      `Verify Atom connectivity, installed connectors (${ctx.sourceName}, ${ctx.targetName}), folder access and sub-account scopes.`,
-      ['AtomSphere API / Atom Telemetry', 'Connection Component Catalog', 'User Permissions Matrix']),
-    gate(2, 'Resolve contracts and obtain design decisions', ns,
-      `Confirm ${ctx.sourceName} and ${ctx.targetName} schemas, mandatory fields, enumerations and key fields.`,
-      [`${ctx.sourceName} Source Profile`, `${ctx.targetName} Target Profile`, 'Contract Specification']),
-    gate(3, 'Design synchronization, recovery, and process flow', ns,
-      `Establish topology for ${ctx.middleware.length + 2} stages: ${config.stages.map(s => s.selectedShapeOrConnector).join(' Ã¢â€ â€™ ')}.`,
-      ['Boomi Canvas Topology Diagram', 'Document Flow Sequencer', 'Error Routing Architecture']),
-    gate(4, 'Prepare isolated development components and connections', ns,
-      `Create the dev folder structure, isolated ${ctx.sourceName} and ${ctx.targetName} sandbox connections and credentials.`,
-      [`${ctx.sourceName} Connection Component`, `${ctx.targetName} Sandbox Connection`, 'Folder Architecture']),
-    gate(5, `Implement ${ctx.sourceName} retrieval and state handling`, ns,
-      settings.enableDocumentSplitCombine
-        ? `Configure the ${ctx.sourceName} start shape, split documents, and set ${settings.separateDPPvsDDP ? 'DPP/DDP' : 'tracking'} properties.`
-        : `Configure the ${ctx.sourceName} start shape and set tracking properties.`,
-      [`${ctx.sourceName} Connector Operation`, 'Set Properties Shape (Ingress)', ...(settings.enableDocumentSplitCombine ? ['Data Process (Split Documents)'] : [])]),
-    gate(6, 'Implement business rule filtering and validation', ns,
-      ctx.hasRule
-        ? `Build Decision or Business Rules shape for: "${ctx.businessRule}" with clean rejection handling.`
-        : 'No business rule specified; confirm with the engineer whether any filtering is needed.',
-      ['Decision / Business Rules Shape', 'Clean Discard Stop Shape', 'Rejected Document Log']),
-    gate(7, `Implement mapping to ${ctx.targetName}`, ns,
-      `Construct the Map component from ${ctx.sourceName} fields to ${ctx.targetName} with date formatting and defaults${ctx.mentionsEmail ? ' and a Lowercase() function' : ''}.`,
-      ['Boomi Map Component', ...(ctx.mentionsEmail ? ['String Lowercase Map Function'] : []), 'Date Mask Conversion Function']),
-    gate(8, `Implement ${ctx.targetName} writes and idempotency`, ns,
-      settings.enforceIdempotentUpsert
-        ? `Configure ${ctx.targetName} operation Action=${ctx.action} on ${ctx.objectName}, matching on an external ID, batch size ${ctx.batchSize}.`
-        : `Configure ${ctx.targetName} operation Action=${ctx.action} on ${ctx.objectName}, batch size ${ctx.batchSize}. Idempotency guard is disabled.`,
-      [`${ctx.targetName} Connector Operation (${ctx.action})`, 'External ID Deduplication Key', 'Bulk Commit Configuration'],
-      settings.enforceIdempotentUpsert),
-    gate(9, 'Implement unified error handling, retry, and replay', ns,
-      `Try/Catch Catch branch extracting 'Base - Try/Catch Message', logging to Notify and forwarding to a DLQ${settings.enable3xExponentialRetry ? ', with 3x exponential retry' : ''}.`,
-      ['Try/Catch Shape (Catch All Errors)', 'Set Properties (Catch Context)', 'Notify Shape / Dead Letter Store'],
-      settings.enableTryCatchBoundary),
-    gate(10, 'Configure observability and the disabled schedule', ns,
-      settings.deployInitialScheduleDisabled
-        ? 'Define tracking variables and process reporting tags; ensure the initial deployment schedule is DISABLED.'
-        : 'Define tracking variables and process reporting tags. Schedule guard is disabled.',
-      ['Process Reporting Metadata', 'Dynamic Process Property Tracking', 'Deployment Schedule Guardrail'],
-      settings.deployInitialScheduleDisabled),
-    gate(11, 'Build reproducible fixtures and a test matrix', ns,
-      `Prepare synthetic ${ctx.source?.details?.profileType || 'JSON'} documents: happy path, rule-rejected, missing fields, and timeout simulation.`,
-      ['Test Fixture Catalog', 'Edge Case Test Payloads', 'Schema Validation Harness']),
-    gate(12, 'Run development functional and failure path tests', ns,
-      'Execute Test Mode runs on a dev Atom, verifying shape execution and document log counts.',
-      ['Test Mode Execution Logs', 'Document Flow Audits', 'Shape Performance Metrics']),
-    gate(13, 'Validate outbox, capacity, and recovery', ns,
-      `Verify ${ctx.batchSize}-document batch commits, Atom heap use${settings.enforceIdempotentUpsert ? ', and zero duplicates on a second run' : ''}.`,
-      [...(settings.enforceIdempotentUpsert ? ['Idempotency Verification Report'] : []), 'Atom JVM Telemetry', `${ctx.targetName} Audit Log`]),
-    gate(14, 'Assemble evidence and operational handover', ns,
-      'Compile component documentation, property catalog, error code guide and a support runbook.',
-      ['Operational Runbook', 'Property Dictionary', 'Error Code Decoders']),
-    gate(15, 'Obtain human release approval and prepare deployment instructions', ns,
-      'Package components as a release candidate, prepare environment attachment instructions, and await human sign-off.',
-      ['Packaged Component Spec', 'Environment Extension Profile', 'Human Release Sign-off Sheet']),
-  ];
+  const shapes = config.stages.map(stage => stage.selectedShapeOrConnector);
+  const has = (name: string) => shapes.includes(name);
+  const hasConnector = config.stages.some(stage =>
+    (stage.category === 'SOURCE SYSTEM' || stage.category === 'DESTINATION')
+    && !['Start - No Data', 'Stop', 'Return Documents'].includes(stage.selectedShapeOrConnector)
+  );
+  const hasMappingOrRules = has('Map & transform') || has('Business Rules & DPP Shape') || has('Decision & Route Shapes');
+  const hasProperties = settings.separateDPPvsDDP || has('Set Properties') || has('Try/Catch & Set Properties');
+  const hasErrorHandling = settings.enableTryCatchBoundary || has('Try/Catch & Set Properties');
+  const hasSplit = settings.enableDocumentSplitCombine || has('Data Process (Split/Combine)');
+
+  const candidates = [
+    gate(1, 'Inspect the development environment', 'boomi / inspect / dev',
+      'Confirm access, target environment, and required connector availability before implementation.',
+      ['Environment access', 'Connector availability']),
+    gate(2, 'Confirm the integration requirements', ns,
+      `Confirm the source, destination, data contract, and configuration notes for the ${config.stages.length} stages in this blueprint.`,
+      config.stages.map(stage => `${stage.label}: ${stage.selectedShapeOrConnector}`)),
+    gate(3, 'Implement the saved process canvas', ns,
+      'Build the process using only the stages listed in the blueprint and in the same order.',
+      config.stages.map(stage => `${stage.label}: ${stage.selectedShapeOrConnector}`)),
+    ...(hasConnector ? [gate(4, 'Configure the listed connector stages', ns,
+      'Set up connection and operation details for connector stages that appear on this canvas. Confirm credentials and object details with the engineer.',
+      config.stages.filter(stage => stage.category === 'SOURCE SYSTEM' || stage.category === 'DESTINATION').map(stage => `${stage.selectedShapeOrConnector}${stage.details?.action ? ` · ${stage.details.action}` : ''}`))] : []),
+    ...(hasMappingOrRules ? [gate(5, 'Configure the listed mapping and rule stages', ns,
+      ctx.hasRule ? `Apply the specified business rule: "${ctx.businessRule}". Configure only mapping/rule shapes present in the canvas.` : 'Configure only the mapping and rule shapes present in the canvas, using confirmed source and destination contracts.',
+      config.stages.filter(stage => ['Map & transform', 'Business Rules & DPP Shape', 'Decision & Route Shapes'].includes(stage.selectedShapeOrConnector)).map(stage => stage.selectedShapeOrConnector))] : []),
+    ...(hasSplit ? [gate(6, 'Configure document splitting when required', ns,
+      'Use document splitting only when the selected stage or the confirmed source payload requires it.',
+      config.stages.filter(stage => stage.selectedShapeOrConnector === 'Data Process (Split/Combine)').map(stage => stage.selectedShapeOrConnector).concat(settings.enableDocumentSplitCombine && !has('Data Process (Split/Combine)') ? ['Conditional split guardrail'] : []))] : []),
+    ...(hasProperties ? [gate(7, 'Configure the specified process and document properties', ns,
+      'Use only property names and scopes specified in stage details or confirmed during implementation.',
+      config.stages.filter(stage => ['Set Properties', 'Try/Catch & Set Properties'].includes(stage.selectedShapeOrConnector)).map(stage => stage.selectedShapeOrConnector).concat(settings.separateDPPvsDDP ? ['DPP/DDP scope rules'] : []))] : []),
+    ...(hasErrorHandling ? [gate(8, 'Configure error handling and recovery', ns,
+      'Implement the listed Try/Catch stage or enabled error-boundary guardrail. Confirm retry and dead-letter behavior before adding it.',
+      config.stages.filter(stage => stage.selectedShapeOrConnector === 'Try/Catch & Set Properties').map(stage => stage.selectedShapeOrConnector).concat(settings.enableTryCatchBoundary && !has('Try/Catch & Set Properties') ? ['Conditional Try/Catch guardrail'] : []))] : []),
+    ...(settings.enable3xExponentialRetry ? [gate(9, 'Confirm retry behavior for connector failures', ns,
+      'Apply retry behavior only to operations that support it; confirm retry limits and backoff before deployment.',
+      ['Retry policy confirmation'])] : []),
+    ...(settings.deployInitialScheduleDisabled ? [gate(10, 'Keep the initial deployment schedule disabled', ns,
+      'If the process uses a schedule, verify it remains disabled for the initial deployment.',
+      ['Initial schedule setting'])] : []),
+    gate(11, 'Review the plan and prepare focused test cases', ns,
+      'Prepare test cases for the stages and rules actually present in this blueprint; do not assume schemas or sample payloads.',
+      ['Happy path', ...(ctx.hasRule ? ['Business rule cases'] : []), ...(hasErrorHandling ? ['Error path'] : [])]),
+    gate(12, 'Run development tests and review results', ns,
+      'Run the agreed test cases in the development environment and verify document outcomes for the listed stages.',
+      ['Development test results']),
+    gate(13, 'Obtain approval and prepare handover', ns,
+      'Review the completed plan, unresolved configuration, and deployment requirements with the owner before release.',
+      ['Human approval', 'Handover notes']),
+  ].filter(item => item.included);
+
+  return candidates.map((item, index) => ({ ...item, id: `gate-${String(index + 1).padStart(2, '0')}`, stepNum: String(index + 1).padStart(2, '0') }));
 };
 
 /**
