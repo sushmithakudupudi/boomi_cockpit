@@ -1,11 +1,15 @@
 import React, { useState } from 'react';
 import { History } from 'lucide-react';
-import type { ComponentRevision } from '../../types/revisions';
+import type { ComponentRevision, RevisionSource } from '../../types/revisions';
 import { ComponentBrowser } from './ComponentBrowser';
 import { ComponentRevisions } from './ComponentRevisions';
 import { SourceBanner } from './shared';
 
-export const RevisionHistoryPage: React.FC = () => {
+interface Props {
+  onAiDocs?: (source: RevisionSource, component: ComponentRevision, revision: ComponentRevision) => void;
+}
+
+export const RevisionHistoryPage: React.FC<Props> = ({ onAiDocs }) => {
   const [selected, setSelected] = useState<ComponentRevision | null>(null);
 
   return (
@@ -23,7 +27,8 @@ export const RevisionHistoryPage: React.FC = () => {
       </div>
 
       {selected ? (
-        <ComponentRevisions source="live" component={selected} onBack={() => setSelected(null)} />
+        <ComponentRevisions source="live" component={selected} onBack={() => setSelected(null)}
+          onAiDocs={onAiDocs && ((rev) => onAiDocs('live', selected, rev))} />
       ) : (
         <div className="space-y-4">
           <SourceBanner source="live" />

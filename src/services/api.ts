@@ -22,24 +22,52 @@ export class ApiError extends Error {
   }
 }
 
-// Revision endpoints never fall back to mock data: failures must reach the UI.
-async function revisionRequest<T>(path: string, init?: RequestInit): Promise<T> {
+// Revision and documentation endpoints never fall back to mock data: failures must reach the UI.
+async function strictRequest<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(`${BASE_URL}/revisions${path}`, init);
+    res = await fetch(`${BASE_URL}${path}`, init);
   } catch {
     throw new ApiError('The BoomiOps backend is unreachable. Start it with `npm run backend` and retry.', 'backend_unreachable');
   }
-  if (!res.ok) {
-    let detail: { code?: string; message?: string } = {};
-    try {
-      detail = (await res.json()).detail ?? {};
-    } catch {
-      /* non-JSON error body */
-    }
-    throw new ApiError(detail.message || `Request failed (HTTP ${res.status}).`, detail.code || 'error', res.status);
-  }
+  if (!res.ok) throw await errorFromResponse(res);
   return res.json();
+}
+
+async function errorFromResponse(res: Response): Promise<ApiError> {
+  let detail: unknown;
+  try {
+    detail = (await res.json()).detail;
+  } catch {
+    /* non-JSON error body */
+  }
+  // Our routes always send {code, message}; FastAPI's plain "Not Found" means the running backend lacks the route
+  if (res.status === 404 && typeof detail === 'string') {
+    return new ApiError(
+      'The running backend does not have this feature yet. It is probably running older code: stop it (Ctrl+C) and start it again with `npm run backend`.',
+      'backend_outdated',
+      404
+    );
+  }
+  const d = (detail ?? {}) as { code?: string; message?: string };
+  return new ApiError(d.message || `Request failed (HTTP ${res.status}).`, d.code || 'error', res.status);
+}
+
+const revisionRequest = <T,>(path: string, init?: RequestInit) => strictRequest<T>(`/revisions${path}`, init);
+
+export interface ProcessDoc {
+  source: RevisionSource;
+  componentId: string;
+  version: number;
+  processName: string;
+  markdown: string;
+  summary: string;
+  componentType: string;
+  mermaid: string;
+  steps: { id: string; label: string; type: string; typeName: string }[];
+  aiSummary: boolean;
+  modelUsed: string;
+  generatedAt: string;
 }
 
 export interface StatsData {
@@ -332,6 +360,29 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ leftXml, rightXml, leftLabel, rightLabel, includeUnchanged }),
     }),
+
+  // AI Docs for one component revision (throws ApiError, never returns mock data)
+  generateProcessDoc: (source: RevisionSource, componentId: string, version: number) =>
+    strictRequest<ProcessDoc>(`/process-docs/${encodeURIComponent(componentId)}?${new URLSearchParams({ source, version: String(version) })}`),
+
+  // Fetches the Word/PDF file and hands it to the browser as a download
+  async downloadProcessDoc(source: RevisionSource, componentId: string, version: number, format: 'docx' | 'pdf') {
+    const p = new URLSearchParams({ source, version: String(version), format });
+    let res: Response;
+    try {
+      res = await fetch(`${BASE_URL}/process-docs/${encodeURIComponent(componentId)}/export?${p}`);
+    } catch {
+      throw new ApiError('The BoomiOps backend is unreachable. Start it with `npm run backend` and retry.', 'backend_unreachable');
+    }
+    if (!res.ok) throw await errorFromResponse(res);
+    const name = res.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1] ?? `process_v${version}.${format}`;
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
 
   // Build (or dry-run) a Boomi process from Architecture Compiler stages
   async buildBlueprint(req: {

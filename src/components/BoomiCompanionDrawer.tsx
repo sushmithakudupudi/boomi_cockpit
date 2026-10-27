@@ -4,10 +4,13 @@ import {
   Bot, 
   Send, 
   Zap, 
-  ChevronRight
+  ChevronRight,
+  FileText,
+  FileType,
+  Loader2
 } from 'lucide-react';
-import type { CompanionMessage, ExecutionRecord } from '../types/boomi';
-import { api } from '../services/api';
+import type { CompanionMessage, ExecutionRecord, ProcessDocRef } from '../types/boomi';
+import { api, ApiError } from '../services/api';
 import { MarkdownText } from './MarkdownText';
 
 interface BoomiCompanionDrawerProps {
@@ -21,7 +24,10 @@ interface BoomiCompanionDrawerProps {
   /** A question to send automatically once the drawer is open */
   pendingPrompt?: string | null;
   onPromptConsumed?: () => void;
+  docRequest?: (ProcessDocRef & { requestId: number }) | null;
 }
+
+const nowLabel = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
 export const BoomiCompanionDrawer: React.FC<BoomiCompanionDrawerProps> = ({
   isOpen,
@@ -32,6 +38,7 @@ export const BoomiCompanionDrawer: React.FC<BoomiCompanionDrawerProps> = ({
   onOpenDraft,
   pendingPrompt,
   onPromptConsumed,
+  docRequest,
 }) => {
   const [messages, setMessages] = useState<CompanionMessage[]>([
     {
@@ -80,6 +87,63 @@ ${f.errorMessage.slice(0, 220)}` : ''}`,
   }, [executions]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [downloading, setDownloading] = useState<string | null>(null);
+
+  // "AI Docs" from Revision History: summarize that revision, then offer the detailed Word/PDF
+  const handledDocRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!docRequest || handledDocRef.current === docRequest.requestId) return;
+    handledDocRef.current = docRequest.requestId;
+    const { requestId, ...ref } = docRequest;
+    setMessages((prev) => [
+      ...prev,
+      { id: `usr-doc-${requestId}`, sender: 'user', text: `Summarize v${ref.version} of ${ref.processName}`, timestamp: nowLabel() },
+    ]);
+    setIsTyping(true);
+    api
+      .generateProcessDoc(ref.source, ref.componentId, ref.version)
+      .then((doc) => {
+        // Only processes have a flow; other components get their type instead
+        const detail = doc.steps.length
+          ? `**Flow:** ${doc.steps.map((s) => s.label).join(' → ')}`
+          : `**Type:** ${doc.componentType}`;
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `doc-${requestId}`,
+            sender: 'companion',
+            text:
+              `## ${doc.processName} · v${doc.version}\n\n${doc.summary}\n\n${detail}\n\n` +
+              (doc.steps.length
+                ? 'Need more detail? Download the full documentation with every step, referenced component and error-handling note.'
+                : 'Need more detail? Download the full documentation with its configuration and referenced components.'),
+            timestamp: nowLabel(),
+            processDoc: ref,
+          },
+        ]);
+      })
+      .catch((e: ApiError) => {
+        setMessages((prev) => [
+          ...prev,
+          { id: `doc-err-${requestId}`, sender: 'companion', text: `I could not document v${ref.version} of ${ref.processName}: ${e.message}`, timestamp: nowLabel() },
+        ]);
+      })
+      .finally(() => setIsTyping(false));
+  }, [docRequest]);
+
+  const downloadDoc = async (msgId: string, ref: ProcessDocRef, format: 'docx' | 'pdf') => {
+    setDownloading(`${msgId}-${format}`);
+    try {
+      await api.downloadProcessDoc(ref.source, ref.componentId, ref.version, format);
+    } catch (e) {
+      setMessages((prev) => [
+        ...prev,
+        { id: `dl-err-${Date.now()}`, sender: 'companion', text: `Download failed: ${(e as ApiError).message}`, timestamp: nowLabel() },
+      ]);
+    } finally {
+      setDownloading(null);
+    }
+  };
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -265,6 +329,29 @@ ${f.errorMessage.slice(0, 220)}` : ''}`,
                 <div className="whitespace-pre-wrap">{msg.text}</div>
               ) : (
                 <MarkdownText text={msg.text} hideMermaid={Boolean(msg.codeBlock)} />
+              )}
+
+              {/* Detailed documentation downloads */}
+              {msg.processDoc && (
+                <div className="mt-3 pt-2.5 border-t border-slate-800 grid grid-cols-2 gap-2">
+                  {([
+                    { format: 'docx', label: 'Download Word', icon: FileText },
+                    { format: 'pdf', label: 'Download PDF', icon: FileType },
+                  ] as const).map(({ format, label, icon: Icon }) => {
+                    const busy = downloading === `${msg.id}-${format}`;
+                    return (
+                      <button
+                        key={format}
+                        onClick={() => downloadDoc(msg.id, msg.processDoc!, format)}
+                        disabled={downloading !== null}
+                        className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-boomi-blue to-boomi-accent hover:from-blue-600 hover:to-sky-400 text-white font-semibold text-xs shadow-md shadow-sky-950 transition cursor-pointer disabled:opacity-50 disabled:cursor-wait"
+                      >
+                        {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Icon className="w-3.5 h-3.5" />}
+                        <span>{label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               )}
 
               {/* Code block if present */}
