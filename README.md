@@ -67,6 +67,16 @@ Boomi Companion is powerful, but traditionally trapped inside the developer canv
 
 ## 🏃 Getting Started
 
+### 0. Clone & Configure
+```bash
+git clone https://github.com/sushmithakudupudi/boomi_cockpit.git
+cd boomi_cockpit
+
+# Create your own backend config (never commit this file)
+cp backend/.env.example backend/.env
+```
+Fill in your own `BOOMI_ACCOUNT_ID`, `BOOMI_USERNAME` and `BOOMI_API_TOKEN` in `backend/.env` to connect to a real AtomSphere account. The LLM keys are optional.
+
 ### 1. Install Dependencies
 ```bash
 # Frontend dependencies
