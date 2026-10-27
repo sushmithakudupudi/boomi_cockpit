@@ -105,7 +105,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500" />
           </button>
 
-          {/* Architecture Compiler Toggle Button */}
+          {/* ConnectCraft Toggle Button */}
           {onSelectModule && (
             <button
               onClick={() => onSelectModule(activeModule === 'compiler' ? 'healing' : 'compiler')}
@@ -114,7 +114,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   ? 'bg-purple-600 text-white border-purple-400 shadow-lg shadow-purple-900/40'
                   : 'bg-purple-950/40 text-purple-300 border-purple-500/30 hover:bg-purple-900/50'
               }`}
-              title="Toggle Visual Architecture Compiler"
+              title="Toggle ConnectCraft"
             >
               <Wand2 className="w-3.5 h-3.5 text-purple-300" />
               <span className="hidden sm:inline">AI Compiler</span>

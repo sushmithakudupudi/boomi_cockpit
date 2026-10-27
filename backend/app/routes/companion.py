@@ -97,7 +97,14 @@ async def delete_blueprint(blueprint_id: str):
     from ..services import blueprint_store
     if not blueprint_store.valid_id(blueprint_id) or not blueprint_store.delete(blueprint_id):
         raise HTTPException(status_code=404, detail="Blueprint not found")
-    return {"deleted": blueprint_id}
+    return {"deleted": blueprint_id, "retentionDays": 30}
+
+@router.post("/blueprints/{blueprint_id}/restore")
+async def restore_blueprint(blueprint_id: str):
+    from ..services import blueprint_store
+    if not blueprint_store.valid_id(blueprint_id) or not blueprint_store.restore(blueprint_id):
+        raise HTTPException(status_code=404, detail="Deleted blueprint not found")
+    return {"restored": blueprint_id}
 
 @router.post("/triage/{execution_id}", response_model=TriageResponse)
 async def triage_execution(execution_id: str):

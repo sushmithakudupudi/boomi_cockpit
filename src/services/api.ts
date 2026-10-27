@@ -240,6 +240,15 @@ export const api = {
     }
   },
 
+  async restoreBlueprint(id: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${BASE_URL}/companion/blueprints/${id}/restore`, { method: 'POST' });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  },
+
   async saveBlueprint(id: string, doc: Record<string, any>): Promise<boolean> {
     try {
       const res = await fetch(`${BASE_URL}/companion/blueprints/${id}`, {
