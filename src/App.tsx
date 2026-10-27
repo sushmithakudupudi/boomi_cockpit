@@ -27,7 +27,7 @@ const newBlueprintId = () => `bp-${Date.now().toString(36)}${Math.random().toStr
 
 export function App() {
   const [activeModule, setActiveModule] = useState<AppModule>('compiler');
-  // Architecture Compiler: the editor, the Draft list, or the Sent list
+  // ConnectCraft editor and saved item views
   const [compilerView, setCompilerView] = useState<CompilerView>('editor');
   const [blueprintId, setBlueprintId] = useState<string | null>(null);
   const [records, setRecords] = useState<BlueprintRecord[]>([]);
@@ -59,13 +59,15 @@ export function App() {
   // Resume the most recent draft on start, or begin a fresh one
   useEffect(() => {
     refreshRecords().then((list) => {
-      const latestDraft = list?.find((r) => r.status !== 'sent');
+      const latestDraft = list?.find((r) => r.status !== 'sent' && !r.deletedAt);
       setBlueprintId(latestDraft?.id ?? newBlueprintId());
     });
   }, []);
 
-  const drafts = records.filter((r) => r.status !== 'sent');
-  const sent = records.filter((r) => r.status === 'sent');
+  const activeRecords = records.filter((r) => !r.deletedAt);
+  const deleted = records.filter((r) => !!r.deletedAt);
+  const drafts = activeRecords.filter((r) => r.status !== 'sent');
+  const sent = activeRecords.filter((r) => r.status === 'sent');
 
   const handleCompilerView = (view: CompilerView) => {
     setActiveModule('compiler');
@@ -90,7 +92,14 @@ export function App() {
     }
     if (record.id === blueprintId) setBlueprintId(newBlueprintId());
     await refreshRecords();
-    showToast(record.status === 'sent' ? 'Record removed. The process in Boomi is not deleted.' : 'Draft deleted.');
+    showToast(record.status === 'sent' ? 'Moved to Deleted. The process in Boomi is not deleted.' : 'Draft moved to Deleted.');
+  };
+
+  const handleRestoreRecord = async (record: BlueprintRecord) => {
+    const ok = await api.restoreBlueprint(record.id);
+    if (!ok) { showToast('Could not restore item.'); return; }
+    await refreshRecords();
+    showToast('Item restored.');
   };
 
   const handleDuplicate = async (record: BlueprintRecord) => {
@@ -246,6 +255,7 @@ export function App() {
         onCompilerView={handleCompilerView}
         draftCount={drafts.length}
         sentCount={sent.length}
+        deletedCount={deleted.length}
         healingAlertCount={failedCount}
         executionsCount={executions.length}
         atom={atoms[0]}
@@ -269,7 +279,7 @@ export function App() {
         atom={atoms[0]}
         onRefresh={handleResetDemo}
         sectionLabel={
-          activeModule === 'compiler' ? 'Visual Architecture'
+          activeModule === 'compiler' ? 'ConnectCraft'
             : activeModule === 'revisions' ? 'Revision History'
             : (activePlaceholder?.label ?? 'Self-Healing')
         }
@@ -277,7 +287,7 @@ export function App() {
           activeModule === 'healing'
             ? (activeTab === 'cockpit' ? 'Live Cockpit' : 'Process Reporting')
             : activeModule === 'compiler'
-              ? (compilerView === 'draft' ? 'Draft' : compilerView === 'sent' ? 'Sent' : 'New')
+              ? (compilerView === 'draft' ? 'Draft' : compilerView === 'sent' ? 'Sent' : compilerView === 'deleted' ? 'Deleted' : 'New')
               : activeModule === 'revisions' ? 'Revision History' : 'Overview'
         }
       />
@@ -303,10 +313,11 @@ export function App() {
           ) : (
             <CompilerRecordsPage
               kind={compilerView}
-              records={compilerView === 'draft' ? drafts : sent}
+              records={compilerView === 'draft' ? drafts : compilerView === 'sent' ? sent : deleted}
               onOpen={handleOpenDraft}
               onDelete={handleDeleteRecord}
               onDuplicate={handleDuplicate}
+              onRestore={handleRestoreRecord}
               onNew={() => handleCompilerView('editor')}
             />
           )

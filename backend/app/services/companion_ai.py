@@ -42,7 +42,7 @@ class CompanionAIService:
                 id=msg_id,
                 sender="companion",
                 text=(
-                    "To build a process in Boomi, open the **Architecture Compiler** tab, lay out your shapes and "
+                    "To build a process in Boomi, open the **ConnectCraft** tab, lay out your shapes and "
                     "click **Build in Boomi**. You will see the exact shape list and confirm it before anything is created."
                 ),
                 timestamp=now_time,

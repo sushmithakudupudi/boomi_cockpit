@@ -33,3 +33,4 @@ __pycache__/
 
 # Saved compiler blueprints
 backend/storage/
+.venv

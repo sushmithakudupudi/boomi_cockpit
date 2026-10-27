@@ -45,8 +45,22 @@ def get(blueprint_id: str) -> Optional[Dict[str, Any]]:
 
 def list_all() -> List[Dict[str, Any]]:
     with _lock:
-        docs = list(_read().values())
+        data = _read()
+        now = datetime.now(timezone.utc)
+        expired = [key for key, doc in data.items() if doc.get("deletedAt") and (now - _parse_date(doc["deletedAt"])).total_seconds() >= 30 * 86400]
+        for key in expired:
+            del data[key]
+        if expired:
+            _write(data)
+        docs = list(data.values())
     return sorted(docs, key=lambda d: d.get("updatedAt", ""), reverse=True)
+
+
+def _parse_date(value: str) -> datetime:
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return datetime.min.replace(tzinfo=timezone.utc)
 
 
 def put(blueprint_id: str, doc: Dict[str, Any]) -> Dict[str, Any]:
@@ -58,11 +72,23 @@ def put(blueprint_id: str, doc: Dict[str, Any]) -> Dict[str, Any]:
     return doc
 
 
+def restore(blueprint_id: str) -> bool:
+    with _lock:
+        data = _read()
+        doc = data.get(blueprint_id)
+        if not doc or not doc.get("deletedAt"):
+            return False
+        doc.pop("deletedAt", None)
+        doc["updatedAt"] = datetime.now(timezone.utc).isoformat()
+        _write(data)
+    return True
+
+
 def delete(blueprint_id: str) -> bool:
     with _lock:
         data = _read()
         if blueprint_id not in data:
             return False
-        del data[blueprint_id]
+        data[blueprint_id]["deletedAt"] = datetime.now(timezone.utc).isoformat()
         _write(data)
     return True

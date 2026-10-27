@@ -144,7 +144,7 @@ export const BoomiCompanionDrawer: React.FC<BoomiCompanionDrawerProps> = ({
         {
           id: `comp-build-${Date.now()}`,
           sender: 'companion',
-          text: 'To build a process in Boomi, open the **Architecture Compiler** tab, lay out your shapes and click **Build in Boomi**. You will see the exact shape list and confirm it before anything is created.',
+          text: 'To build a process in Boomi, open the **ConnectCraft** tab, lay out your shapes and click **Build in Boomi**. You will see the exact shape list and confirm it before anything is created.',
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         }
       ]);

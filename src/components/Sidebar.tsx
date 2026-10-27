@@ -13,13 +13,14 @@ import {
   Wand2,
   Plus,
   FileEdit,
-  Send
+  Send,
+  Trash2
 } from 'lucide-react';
 import type { AtomHealth } from '../types/boomi';
 
 export type AppModule = 'healing' | 'compiler' | 'revisions' | 'module3';
 export type HealingTab = 'cockpit' | 'reporting';
-export type CompilerView = 'editor' | 'draft' | 'sent';
+export type CompilerView = 'editor' | 'draft' | 'sent' | 'deleted';
 
 // Placeholder modules — rename / fill in as each one gets built
 export const PLACEHOLDER_MODULES: { id: Exclude<AppModule, 'healing' | 'compiler' | 'revisions'>; label: string; hint: string; icon: React.ElementType }[] = [
@@ -35,6 +36,7 @@ interface SidebarProps {
   onCompilerView: (view: CompilerView) => void;
   draftCount?: number;
   sentCount?: number;
+  deletedCount?: number;
   healingAlertCount?: number;
   executionsCount?: number;
   atom?: AtomHealth;
@@ -67,6 +69,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCompilerView,
   draftCount = 0,
   sentCount = 0,
+  deletedCount = 0,
   healingAlertCount = 0,
   executionsCount = 0,
   atom,
@@ -170,7 +173,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {moduleButton(
           'compiler',
-          'Architecture Compiler',
+          'ConnectCraft',
           'Blueprint & Spec Prompt',
           Wand2,
           <ChevronDown
@@ -187,6 +190,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               { id: 'editor', label: '+ New', icon: Plus, count: undefined },
               { id: 'draft', label: 'Draft', icon: FileEdit, count: draftCount },
               { id: 'sent', label: 'Sent', icon: Send, count: sentCount },
+              { id: 'deleted', label: 'Deleted Item(s)', icon: Trash2, count: deletedCount },
             ] as { id: CompilerView; label: string; icon: React.ElementType; count?: number }[]).map(({ id, label, icon: Icon, count }) => {
               const isActive = compilerView === id;
               return (

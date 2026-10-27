@@ -208,6 +208,7 @@ class SavedBlueprint(BaseModel):
     sentAt: Optional[str] = None
     buildResult: Optional[Dict[str, Any]] = None
     updatedAt: Optional[str] = None
+    deletedAt: Optional[str] = None
 
 class GenerateBlueprintPromptResponse(BaseModel):
     prompt: str
