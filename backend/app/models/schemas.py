@@ -215,3 +215,15 @@ class GenerateBlueprintPromptResponse(BaseModel):
     modelUsed: str = "gpt-4o-mini"
     generatedAt: str
     source: str = "openai"
+
+
+class RerunProcessRequest(BaseModel):
+    confirm: bool = False  # must be true: running a process is a real action
+    atomName: Optional[str] = None
+
+class RerunProcessResponse(BaseModel):
+    success: bool
+    processId: str
+    atomName: str
+    requestId: Optional[str] = None
+    message: str

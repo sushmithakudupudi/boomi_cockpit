@@ -16,8 +16,10 @@ from .routes import (
     stats,
     system,
     revisions,
+    notifications,
 )
 from .services.boomi_service import boomi_service
+from .services import push_notifications
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("boomi_main")
@@ -27,7 +29,10 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Boomi Companion Command Center API...")
     # Asynchronously synchronize live Atoms & Executions from Dell Boomi AtomSphere
     asyncio.create_task(boomi_service.sync_from_boomi_platform())
+    # Poll Boomi for new failures and push alerts to subscribed browsers
+    watcher = asyncio.create_task(push_notifications.watch_failures())
     yield
+    watcher.cancel()
     logger.info("Shutting down Boomi Companion Command Center...")
 
 app = FastAPI(
@@ -95,6 +100,7 @@ app.include_router(topology.router, prefix=settings.API_PREFIX)
 app.include_router(stats.router, prefix=settings.API_PREFIX)
 app.include_router(system.router, prefix=settings.API_PREFIX)
 app.include_router(revisions.router, prefix=settings.API_PREFIX)
+app.include_router(notifications.router, prefix=settings.API_PREFIX)
 
 @app.get("/", include_in_schema=False)
 def root():

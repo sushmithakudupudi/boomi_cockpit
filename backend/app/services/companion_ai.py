@@ -1,9 +1,11 @@
 import datetime
+import json
 import time
 import re
 from typing import Dict, Any, Optional
 from ..models.schemas import CompanionMessage, SuggestedAction, CodeBlock, TriageResponse
 from .boomi_service import boomi_service
+from .boomi_account_tools import TOOL_SCHEMAS, boomi_account_tools, tool_result_text
 from ..config import settings
 import logging
 
@@ -98,10 +100,18 @@ YOUR ROLES & RESPONSIBILITIES:
 3. Guide users with automated self-healing recommendations and blast-radius calculations.
 4. When asked for architecture documentation or Mermaid diagrams, generate standard sequence diagrams or flowcharts using ```mermaid syntax.
 
-LIVE ATOM RUNTIME REALITY:
-- The user's Boomi environment currently has {len(atoms)} runtime Atom(s): {atoms_summary}.
-- Atom name: ESI-PC16.easystepin.com is ONLINE (active and communicating with Dell Boomi AtomSphere).
-- When asked how many atoms are in the environment, clearly answer that there is {len(atoms)} atom: ESI-PC16.easystepin.com, and report its real status as ONLINE.
+ACCOUNT KNOWLEDGE (use your tools, never guess):
+- You have read-only tools for this Boomi account: get_environments, get_atoms, get_users_and_roles, get_audit_log, get_deployments, get_components, get_component_revisions.
+- Call them for any question about environments, atoms, users and roles, who logged in or changed something, deployments, processes or other components. You may call several in one turn.
+- "Environments" are AtomSphere Environments (use get_environments). They are not the same as runtime Atoms (get_atoms).
+- For "what changed in <component>", "who edited it" or "why did it start failing", use get_component_revisions: it returns the revision history and the shape-level differences between two versions. Describe the changes in plain language (shape added or removed, property changed, connection re-routed).
+- For "who changed an integration" use get_components (createdBy / modifiedBy) and get_audit_log. For logins use get_audit_log (type "account / ON_ENTRY" is a sign-in; distinctSessionsByUser counts sessions).
+- The Boomi Platform API does not provide browser type or IP address. If asked, say so and offer what is available (user, time, event type, source, session count).
+- Never show session ids, passwords or tokens. Only report what the tools returned; if a tool returns an error, say so plainly.
+- Answer the question that was asked, with the specific numbers and names from the tool results.
+
+LIVE ATOM RUNTIME (already fetched):
+- {len(atoms)} runtime Atom(s): {atoms_summary}.
 
 LIVE OPERATIONAL TELEMETRY:
 - Atoms: {atoms_summary}
@@ -110,38 +120,52 @@ LIVE OPERATIONAL TELEMETRY:
 {failed_summary}
 {active_incident_text}
 
-AUTONOMOUS PROCESS GENERATION & BUILD CONFIRMATION:
-When the user asks to build, design, or create a Boomi process (e.g., 'build me a boomi process that maps employee data from xml into json'):
-1. Structure the response into clear steps:
-   - ### **1. Create a New Process** (e.g. Employee_XML_to_JSON_Mapper in folder Training-Sai Nikhil-Badathala)
-   - ### **2. Configure the Start Shape** (Inbound connector / No Data trigger)
-   - ### **3. Add a Data Process / Map Shape** (XML to JSON conversion step)
-   - ### **4. Configure the Destination / Stop Shape**
-2. Include a visual flowchart using ```mermaid syntax.
-3. Conclude by explicitly asking the user:
-   "I have prepared this integration blueprint. Would you like me to proceed to build and publish this process directly into your Boomi AtomSphere account, or do you have any modifications?"
-4. Always append the action tag:
-   [ACTION:BUILD_PROCESS:Employee_XML_to_JSON_Mapper:🚀 Proceed & Build in Boomi]
+BUILDING PROCESSES:
+- This chat cannot create processes. When the user asks to build or design one, outline the steps and a ```mermaid flowchart, then tell them to open the Architecture Compiler tab, lay out the shapes and use Build in Boomi (they confirm the shape list first). Do not add a build action tag.
 
 OUTPUT CONVENTIONS:
 - Provide structured markdown with bold headings and bullet points.
 - If recommending an immediate action, append an action tag at the very end of your response:
-  [ACTION:BUILD_PROCESS:processName:🚀 Proceed & Build in Boomi]
-  OR [ACTION:VIEW_FLOW:processId:Inspect Process Topology Flow]
+  [ACTION:VIEW_FLOW:processId:Inspect Process Topology Flow]
   OR [ACTION:INSPECT_PAYLOAD:executionId:Triage Failed Execution]
 - Be concise, authoritative, and helpful."""
 
-        response = await self._openai_client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.2,
-            max_tokens=600,
-        )
-
-        raw_text = response.choices[0].message.content or ""
+        # Let the model call the read-only account tools, then answer from their results
+        messages: list = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt},
+        ]
+        raw_text = ""
+        for _ in range(5):
+            response = await self._openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=messages,
+                tools=TOOL_SCHEMAS,
+                tool_choice="auto",
+                temperature=0.2,
+                max_tokens=900,
+            )
+            reply = response.choices[0].message
+            if not reply.tool_calls:
+                raw_text = reply.content or ""
+                break
+            messages.append({
+                "role": "assistant",
+                "content": reply.content,
+                "tool_calls": [
+                    {"id": tc.id, "type": "function", "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                    for tc in reply.tool_calls
+                ],
+            })
+            for tc in reply.tool_calls:
+                try:
+                    args = json.loads(tc.function.arguments or "{}")
+                except ValueError:
+                    args = {}
+                result = await boomi_account_tools.run(tc.function.name, args)
+                messages.append({"role": "tool", "tool_call_id": tc.id, "content": tool_result_text(result)})
+        if not raw_text:
+            raw_text = "I looked up your Boomi account but could not put a complete answer together. Please try asking again."
 
         # Extract suggested action tag if present
         suggested_action = None
@@ -155,12 +179,6 @@ OUTPUT CONVENTIONS:
             )
             # Clean action tag from user-facing text
             raw_text = re.sub(r'\[ACTION:[^\]]+\]', '', raw_text).strip()
-        elif "build" in prompt.lower() or "create" in prompt.lower() and "process" in prompt.lower():
-            suggested_action = SuggestedAction(
-                type="BUILD_PROCESS",
-                label="🚀 Proceed & Build in Boomi",
-                executionId="Employee_XML_to_JSON_Mapper"
-            )
         elif failed_execs and ("fail" in prompt.lower() or "error" in prompt.lower() or "heal" in prompt.lower() or "reprocess" in prompt.lower() or "triage" in prompt.lower()):
             fe = failed_execs[0]
             suggested_action = SuggestedAction(

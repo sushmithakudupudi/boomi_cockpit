@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import type { CompanionMessage, ExecutionRecord } from '../types/boomi';
 import { api } from '../services/api';
+import { MarkdownText } from './MarkdownText';
 
 interface BoomiCompanionDrawerProps {
   isOpen: boolean;
@@ -15,6 +16,9 @@ interface BoomiCompanionDrawerProps {
   executions: ExecutionRecord[];
   onTriggerAutoHeal: (execId: string) => void;
   onOpenFlow: (exec: ExecutionRecord) => void;
+  /** A question to send automatically once the drawer is open */
+  pendingPrompt?: string | null;
+  onPromptConsumed?: () => void;
 }
 
 export const BoomiCompanionDrawer: React.FC<BoomiCompanionDrawerProps> = ({
@@ -23,6 +27,8 @@ export const BoomiCompanionDrawer: React.FC<BoomiCompanionDrawerProps> = ({
   executions,
   onTriggerAutoHeal,
   onOpenFlow,
+  pendingPrompt,
+  onPromptConsumed,
 }) => {
   const [messages, setMessages] = useState<CompanionMessage[]>([
     {
@@ -118,6 +124,15 @@ export const BoomiCompanionDrawer: React.FC<BoomiCompanionDrawerProps> = ({
       setIsTyping(false);
     }
   };
+
+  // Send a question handed over from the page (e.g. "What changed?" on an incident) once the drawer is open
+  useEffect(() => {
+    if (isOpen && pendingPrompt) {
+      onPromptConsumed?.();
+      handleSendMessage(pendingPrompt);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, pendingPrompt]);
 
   const handleActionClick = async (action: CompanionMessage['suggestedAction']) => {
     if (!action) return;
@@ -229,7 +244,11 @@ export const BoomiCompanionDrawer: React.FC<BoomiCompanionDrawerProps> = ({
                   : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-bl-none'
               }`}
             >
-              <div className="whitespace-pre-wrap">{msg.text}</div>
+              {msg.sender === 'user' ? (
+                <div className="whitespace-pre-wrap">{msg.text}</div>
+              ) : (
+                <MarkdownText text={msg.text} hideMermaid={Boolean(msg.codeBlock)} />
+              )}
 
               {/* Code block if present */}
               {msg.codeBlock && (

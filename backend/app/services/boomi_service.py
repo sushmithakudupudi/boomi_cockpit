@@ -1,4 +1,5 @@
 import datetime
+import time
 import xml.etree.ElementTree as ET
 from typing import List, Dict, Any, Optional
 from ..config import settings
@@ -15,6 +16,7 @@ class BoomiService:
         self._topologies: Dict[str, Dict[str, Any]] = {}
         self._reprocessed_count: int = 0
         self._boomi_connected: bool = False
+        self._rerun_times: Dict[str, float] = {}
 
     def _get_boomi_auth(self) -> Optional[tuple]:
         """Builds HTTP Basic Auth credentials for Dell Boomi AtomSphere REST API."""
@@ -171,18 +173,9 @@ class BoomiService:
                     p_name = rec.get("processName", "Boomi Integration Process")
                     p_id = rec.get("processId", "")
 
+                    # The executions API does not say which shape failed, so none is claimed
                     error_shape = None
                     error_type = None
-                    if error_msg or norm_status == "ERROR":
-                        if "mqtt" in p_name.lower():
-                            error_shape = "MQTT Subscriber / Connector"
-                            error_type = "Connector"
-                        elif "modbus" in p_name.lower():
-                            error_shape = "Modbus Connector Action"
-                            error_type = "Connector"
-                        else:
-                            error_shape = "Connector Action"
-                            error_type = "Connector"
 
                     real_execs.append({
                         "id": rec.get("executionId", f"exec-{len(real_execs)}"),
@@ -425,27 +418,34 @@ class BoomiService:
             raise ValueError(f"Execution record with ID '{execution_id}' not found.")
 
         auth = self._get_boomi_auth()
+        live = bool(auth and settings.BOOMI_ACCOUNT_ID)
         api_dispatched = False
 
-        if auth and settings.BOOMI_ACCOUNT_ID:
+        if live:
             account_id = settings.BOOMI_ACCOUNT_ID.strip()
             base_url = settings.BOOMI_BASE_URL.rstrip("/")
+            payload_body = {
+                "executionId": execution_id,
+                "documentId": execution.get("payload", {}).get("documentId", "DOC-001"),
+            }
+            if patched_payload:
+                payload_body["patchContent"] = patched_payload
             try:
                 async with httpx.AsyncClient(timeout=10.0) as client:
-                    reprocess_url = f"{base_url}/{account_id}/ReprocessDocument"
-                    payload_body = {
-                        "executionId": execution_id,
-                        "documentId": execution.get("payload", {}).get("documentId", "DOC-001"),
-                    }
-                    if patched_payload:
-                        payload_body["patchContent"] = patched_payload
-
-                    headers = {"Accept": "application/json", "Content-Type": "application/json"}
-                    res = await client.post(reprocess_url, auth=auth, headers=headers, json=payload_body)
-                    logger.info(f"Boomi AtomSphere ReprocessDocument response: {res.status_code}")
-                    api_dispatched = True
+                    res = await client.post(
+                        f"{base_url}/{account_id}/ReprocessDocument",
+                        auth=auth,
+                        headers={"Accept": "application/json", "Content-Type": "application/json"},
+                        json=payload_body,
+                    )
             except Exception as ex:
-                logger.warning(f"Boomi platform call ({ex}); continuing replay.")
+                logger.warning(f"Boomi reprocess call failed: {ex}")
+                raise RuntimeError(f"Could not reach Boomi to reprocess ({ex.__class__.__name__}). Nothing was changed.")
+            logger.info(f"Boomi AtomSphere ReprocessDocument response: {res.status_code}")
+            if res.status_code not in (200, 201, 202):
+                # Never mark an execution healed unless Boomi accepted the request
+                raise RuntimeError(f"Boomi did not accept the reprocess request (HTTP {res.status_code}). The execution was not changed.")
+            api_dispatched = True
 
         execution["status"] = "SUCCESS"
         execution["reprocessed"] = True
@@ -469,14 +469,76 @@ class BoomiService:
 
         self._reprocessed_count += 1
         now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        dispatch_note = " (Dispatched to Dell Boomi AtomSphere API)" if api_dispatched else ""
+        if api_dispatched:
+            message = f"Boomi accepted the reprocess request for {execution_id}. Check the execution in Boomi to confirm it completed."
+        else:
+            message = f"Demo mode (no Boomi credentials): simulated reprocess of {execution_id}."
         return {
             "success": True,
             "executionId": execution_id,
             "status": "SUCCESS",
-            "message": f"Boomi Companion successfully repaired and reprocessed {execution_id}{dispatch_note}.",
+            "message": message,
             "reprocessTimestamp": now_str,
             "updatedExecution": execution,
+        }
+
+    RERUN_COOLDOWN_SECONDS = 60
+
+    async def rerun_process(self, process_id: str, atom_name: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Executes a deployed process once on an Atom via the Boomi ExecuteProcess API.
+
+        This really runs the process (it can call external systems and generate load), so callers must
+        confirm with the user first. A per-process cooldown stops accidental repeat runs.
+        """
+        auth = self._get_boomi_auth()
+        if not auth or not settings.BOOMI_ACCOUNT_ID:
+            raise ValueError("Boomi credentials are not configured, so the process cannot be run.")
+
+        now = time.time()
+        last = self._rerun_times.get(process_id, 0.0)
+        if now - last < self.RERUN_COOLDOWN_SECONDS:
+            wait = int(self.RERUN_COOLDOWN_SECONDS - (now - last))
+            raise RuntimeError(f"This process was started moments ago. Wait {wait}s before running it again.")
+
+        atoms = await self.get_atoms_live()
+        atom = next((a for a in atoms if atom_name and a.get("name") == atom_name), None) or             next((a for a in atoms if a.get("status") == "ONLINE"), None)
+        if not atom:
+            raise RuntimeError("No online Atom is available to run the process.")
+
+        account_id = settings.BOOMI_ACCOUNT_ID.strip()
+        url = f"{settings.BOOMI_BASE_URL.rstrip('/')}/{account_id}/ExecuteProcess"
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                res = await client.post(
+                    url, auth=auth,
+                    headers={"Accept": "application/json", "Content-Type": "application/json"},
+                    json={"@type": "ExecutionRequest", "atomId": atom["id"], "processId": process_id},
+                )
+        except Exception as ex:
+            raise RuntimeError(f"Could not reach Boomi to start the process ({ex.__class__.__name__}). Nothing was run.")
+
+        logger.info(f"Boomi ExecuteProcess for {process_id} on {atom['name']}: HTTP {res.status_code}")
+        if res.status_code not in (200, 201, 202):
+            detail = ""
+            try:
+                detail = (res.json().get("message") or "")[:200]
+            except Exception:
+                detail = res.text[:200]
+            raise RuntimeError(f"Boomi did not start the process (HTTP {res.status_code}). {detail}".strip())
+
+        self._rerun_times[process_id] = now
+        body: Dict[str, Any] = {}
+        try:
+            body = res.json()
+        except Exception:
+            pass
+        return {
+            "success": True,
+            "processId": process_id,
+            "atomName": atom["name"],
+            "requestId": body.get("requestId"),
+            "message": f"Boomi accepted the run request on {atom['name']}. The new execution appears in Process Reporting shortly.",
         }
 
     async def create_process_component(

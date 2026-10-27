@@ -4,23 +4,38 @@ import {
   CheckCircle2, 
   AlertOctagon, 
   Zap, 
-  Clock, 
-  TrendingUp, 
-  TrendingDown 
+  Clock
 } from 'lucide-react';
 
 interface StatsOverviewProps {
   totalExecutions: number;
   failedCount: number;
   autoHealedCount: number;
+  atomCount: number;
+  /** Most recent failed execution, if any (from real Boomi data) */
+  lastFailure?: { processName: string; startedAt: string };
 }
+
+const timeAgo = (iso: string): string => {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (Number.isNaN(ms) || ms < 0) return 'just now';
+  const mins = Math.floor(ms / 60000);
+  if (mins < 60) return `${Math.max(mins, 1)}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 48) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+};
 
 export const StatsOverview: React.FC<StatsOverviewProps> = ({
   totalExecutions,
   failedCount,
   autoHealedCount,
+  atomCount,
+  lastFailure,
 }) => {
-  const successRate = ((totalExecutions - failedCount) / totalExecutions * 100).toFixed(1);
+  const successRate = totalExecutions > 0
+    ? ((totalExecutions - failedCount) / totalExecutions * 100).toFixed(1)
+    : '100.0';
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -32,11 +47,10 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
         </div>
         <div className="flex items-baseline gap-2">
           <span className="text-2xl font-bold text-white tracking-tight">{totalExecutions.toLocaleString()}</span>
-          <span className="flex items-center text-[11px] font-semibold text-emerald-400">
-            <TrendingUp className="w-3 h-3 mr-0.5" /> +12%
-          </span>
         </div>
-        <p className="text-[11px] text-slate-400 mt-1">Across 3 Active Atoms</p>
+        <p className="text-[11px] text-slate-400 mt-1">
+          Across {atomCount} {atomCount === 1 ? 'Atom' : 'Atoms'}
+        </p>
       </div>
 
       {/* Metric 2: Success Rate */}
@@ -81,29 +95,30 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
       {/* Metric 4: Autonomous Auto-Healed */}
       <div className="p-4 rounded-2xl bg-gradient-to-br from-boomi-card to-sky-950/30 border border-sky-500/30 shadow-lg">
         <div className="flex items-center justify-between text-slate-400 mb-2">
-          <span className="text-xs font-medium text-sky-200">Companion Auto-Healed</span>
+          <span className="text-xs font-medium text-sky-200">Companion Reprocessed</span>
           <Zap className="w-4 h-4 text-boomi-accent" />
         </div>
         <div className="flex items-baseline gap-2">
           <span className="text-2xl font-bold text-boomi-accent tracking-tight">{autoHealedCount}</span>
-          <span className="text-[11px] font-semibold text-sky-300">Self-Healed</span>
+          <span className="text-[11px] font-semibold text-sky-300">Reprocessed</span>
         </div>
-        <p className="text-[11px] text-slate-400 mt-1">Zero manual code change</p>
+        <p className="text-[11px] text-slate-400 mt-1">Accepted by Boomi this session</p>
       </div>
 
-      {/* Metric 5: MTTR (Mean Time to Resolution) */}
+      {/* Metric 5: Last failure (real, from Boomi execution records) */}
       <div className="p-4 rounded-2xl bg-boomi-card border border-boomi-cardBorder hover:border-slate-700 transition shadow-lg">
         <div className="flex items-center justify-between text-slate-400 mb-2">
-          <span className="text-xs font-medium">Incident MTTR</span>
+          <span className="text-xs font-medium">Last Failure</span>
           <Clock className="w-4 h-4 text-purple-400" />
         </div>
         <div className="flex items-baseline gap-2">
-          <span className="text-2xl font-bold text-white tracking-tight">2.4m</span>
-          <span className="flex items-center text-[11px] font-semibold text-emerald-400">
-            <TrendingDown className="w-3 h-3 mr-0.5" /> -85%
+          <span className="text-2xl font-bold text-white tracking-tight">
+            {lastFailure ? timeAgo(lastFailure.startedAt) : 'None'}
           </span>
         </div>
-        <p className="text-[11px] text-slate-400 mt-1">Benchmark: 35.0m</p>
+        <p className="text-[11px] text-slate-400 mt-1 truncate" title={lastFailure?.processName}>
+          {lastFailure ? lastFailure.processName : 'No failed executions on record'}
+        </p>
       </div>
     </div>
   );

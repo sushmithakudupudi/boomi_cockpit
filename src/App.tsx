@@ -9,6 +9,8 @@ import { ProcessReportingPage } from './components/ProcessReportingPage';
 import { RevisionHistoryPage } from './components/revisions/RevisionHistoryPage';
 import { TriageModal } from './components/TriageModal';
 import { BoomiCompanionDrawer } from './components/BoomiCompanionDrawer';
+import { FailureHistory } from './components/FailureHistory';
+import { FailureAlertsToggle } from './components/FailureAlertsToggle';
 import { VisualArchitectureCompiler } from './components/VisualArchitectureCompiler';
 import { api } from './services/api';
 import type { ExecutionRecord, AtomHealth } from './types/boomi';
@@ -34,6 +36,11 @@ export function App() {
   const [executions, setExecutions] = useState<ExecutionRecord[]>([]);
   const [selectedExecution, setSelectedExecution] = useState<ExecutionRecord | null>(null);
   const [isCompanionOpen, setIsCompanionOpen] = useState(false);
+  // A question to send to the Companion as soon as the drawer opens (e.g. "What changed?" on an incident)
+  // Re-run: nothing starts until the user confirms in the dialog
+  const [rerunTarget, setRerunTarget] = useState<ExecutionRecord | null>(null);
+  const [rerunBusy, setRerunBusy] = useState(false);
+  const [companionPrompt, setCompanionPrompt] = useState<string | null>(null);
   const [isReprocessed, setIsReprocessed] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isBackendConnected, setIsBackendConnected] = useState(false);
@@ -156,7 +163,9 @@ export function App() {
     try {
       await api.reprocessExecution(execId);
     } catch (e) {
-      console.warn("Backend reprocess call:", e);
+      // Boomi did not accept it (or the backend is down): leave the incident open and say why
+      showToast(`⚠️ ${e instanceof Error ? e.message : 'Reprocess failed.'}`);
+      return;
     }
 
     setExecutions((prev) =>
@@ -182,7 +191,23 @@ export function App() {
       spread: 70,
       origin: { y: 0.6 }
     });
-    showToast(`⚡ Boomi Companion successfully reprocessed execution ${execId}!`);
+    showToast('⚡ Boomi accepted the reprocess request. Confirm the result in Boomi.');
+  };
+
+  const handleConfirmRerun = async () => {
+    if (!rerunTarget) return;
+    setRerunBusy(true);
+    try {
+      const res = await api.rerunProcess(rerunTarget.processId, rerunTarget.atomName);
+      showToast(`▶️ ${res.message}`);
+      setRerunTarget(null);
+      // Pull the new execution from Boomi once it has had time to run
+      setTimeout(() => { handleResetDemo(); }, 12000);
+    } catch (e) {
+      showToast(`⚠️ ${e instanceof Error ? e.message : 'Could not start the process.'}`);
+    } finally {
+      setRerunBusy(false);
+    }
   };
 
   const handleResetDemo = async () => {
@@ -198,6 +223,10 @@ export function App() {
 
   // Find active failure if any exists in real executions
   const activeErrorExec = executions.find(e => e.status === 'ERROR' && !e.reprocessed);
+  // Most recent failure on record, from real Boomi execution data
+  const lastFailure = executions
+    .filter(e => e.status === 'ERROR' || e.errorMessage)
+    .sort((a, b) => (b.startedAt || '').localeCompare(a.startedAt || ''))[0];
   const failedCount = executions.filter(e => e.status === 'ERROR' && !e.reprocessed).length;
   const autoHealedCount = executions.filter(e => e.reprocessed).length + (isReprocessed ? 1 : 0);
 
@@ -326,6 +355,24 @@ export function App() {
                     <Sparkles className="w-4 h-4 text-amber-200" />
                     <span>Triage with Companion</span>
                   </button>
+                  <button
+                    onClick={() => {
+                      setCompanionPrompt(`What changed in ${activeErrorExec.processName} recently, and who changed it?`);
+                      setIsCompanionOpen(true);
+                    }}
+                    title="Ask the Companion to compare the latest revisions of this process"
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 transition-all cursor-pointer"
+                  >
+                    <span>What changed?</span>
+                  </button>
+                  <button
+                    onClick={() => setRerunTarget(activeErrorExec)}
+                    title="Run this process once on its Atom (asks for confirmation)"
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 transition-all cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Re-run process</span>
+                  </button>
                 </div>
               </div>
             ) : (
@@ -354,9 +401,24 @@ export function App() {
 
             {/* Section 1: KPI Stats Overview */}
             <StatsOverview
-              totalExecutions={executions.length || 20}
+              totalExecutions={executions.length}
               failedCount={failedCount}
               autoHealedCount={autoHealedCount}
+              atomCount={atoms.length || 1}
+              lastFailure={lastFailure}
+            />
+
+            {/* Browser alerts for new failures, delivered even when the page is closed */}
+            <FailureAlertsToggle onShowToast={showToast} />
+
+            {/* Failure history from real execution records */}
+            <FailureHistory
+              executions={executions}
+              onSelectProcess={(exec) => {
+                setSelectedProcessId(exec.processId);
+                setSelectedProcessName(exec.processName);
+                showToast(`Loaded live Boomi canvas for: ${exec.processName}`);
+              }}
             />
 
             {/* Section 2: Real Interactive Process Topology (Takes directly from Boomi XML) */}
@@ -436,6 +498,44 @@ export function App() {
       </footer>
       </div>
 
+      {/* Re-run confirmation: this really executes the process */}
+      {rerunTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4" role="dialog" aria-modal="true" aria-label="Confirm re-run">
+          <div className="w-full max-w-md rounded-2xl bg-boomi-card border border-amber-500/40 shadow-2xl p-5 space-y-3">
+            <div className="flex items-center gap-2 text-amber-300 font-bold text-sm">
+              <AlertTriangle className="w-4 h-4" />
+              <span>Run this process now?</span>
+            </div>
+            <p className="text-xs text-slate-300">
+              This starts <strong className="text-white">{rerunTarget.processName}</strong> on <strong className="text-white">{rerunTarget.atomName}</strong> right now.
+              It runs the real integration, so it can call external systems, send or change data, and generate load.
+            </p>
+            {/chaos|load|fuzz/i.test(rerunTarget.processName) && (
+              <p className="text-xs text-amber-200/90">
+                The name suggests a load or chaos test. Running it again will generate traffic and may trigger the same failures.
+              </p>
+            )}
+            <p className="text-[11px] text-slate-500">Boomi must have the process deployed. The same process can only be started once a minute from here.</p>
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                onClick={() => setRerunTarget(null)}
+                disabled={rerunBusy}
+                className="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 text-xs cursor-pointer disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmRerun}
+                disabled={rerunBusy}
+                className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold cursor-pointer disabled:opacity-60"
+              >
+                {rerunBusy ? 'Starting…' : 'Run process'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Incident Triage Modal */}
       <TriageModal
         execution={selectedExecution}
@@ -447,6 +547,8 @@ export function App() {
       <BoomiCompanionDrawer
         isOpen={isCompanionOpen}
         onClose={() => setIsCompanionOpen(false)}
+        pendingPrompt={companionPrompt}
+        onPromptConsumed={() => setCompanionPrompt(null)}
         executions={executions}
         onTriggerAutoHeal={handleAutoHeal}
         onOpenFlow={(exec) => {

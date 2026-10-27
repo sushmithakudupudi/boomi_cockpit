@@ -134,7 +134,7 @@ export const TriageModal: React.FC<TriageModalProps> = ({
                 <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800">
                   <span className="text-[11px] text-slate-400">Error Component</span>
                   <p className="text-xs font-semibold text-slate-200 mt-0.5 truncate">
-                    {execution.errorShapeName || 'Map Component'}
+                    {execution.errorShapeName || 'Not reported by Boomi'}
                   </p>
                 </div>
                 <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800">

@@ -155,23 +155,40 @@ export const api = {
 
   // 7. Reprocess Document (Autonomous Self-Healing)
   async reprocessExecution(executionId: string, patchedPayload?: string) {
+    let res: Response;
     try {
-      const res = await fetch(`${BASE_URL}/reprocess`, {
+      res = await fetch(`${BASE_URL}/reprocess`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ executionId, patchedPayload }),
       });
-      if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-      return await res.json();
-    } catch (err) {
-      console.warn(`Backend /api/reprocess unreachable, simulating locally:`, err);
-      return {
-        success: true,
-        executionId,
-        status: 'SUCCESS',
-        message: `Boomi Companion successfully repaired payload and reprocessed ${executionId}.`,
-      };
+    } catch {
+      throw new Error('The backend is not reachable, so nothing was reprocessed.');
     }
+    if (!res.ok) {
+      const detail = await res.json().then((j) => j.detail).catch(() => '');
+      throw new Error(typeof detail === 'string' && detail ? detail : `Reprocess failed (HTTP ${res.status}).`);
+    }
+    return await res.json();
+  },
+
+  // Run a deployed process once. The backend refuses unless confirm is true.
+  async rerunProcess(processId: string, atomName?: string): Promise<{ message: string; atomName: string; requestId?: string }> {
+    let res: Response;
+    try {
+      res = await fetch(`${BASE_URL}/processes/${encodeURIComponent(processId)}/rerun`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm: true, atomName }),
+      });
+    } catch {
+      throw new Error('The backend is not reachable, so the process was not started.');
+    }
+    if (!res.ok) {
+      const detail = await res.json().then((j) => j.detail).catch(() => '');
+      throw new Error(typeof detail === 'string' && detail ? detail : `Could not start the process (HTTP ${res.status}).`);
+    }
+    return await res.json();
   },
 
   // 8. Reset Demo State
