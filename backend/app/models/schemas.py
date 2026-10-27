@@ -151,3 +151,67 @@ class ResetResponse(BaseModel):
     message: str
     timestamp: str
     executionCount: int
+
+class BlueprintStage(BaseModel):
+    id: str
+    stepNumber: Optional[str] = None
+    category: str
+    label: str
+    selectedShapeOrConnector: str
+    subLabel: Optional[str] = None
+    badgeText: Optional[str] = None
+    notes: Optional[str] = None
+    details: Optional[Dict[str, Any]] = None
+
+class GenerateBlueprintPromptRequest(BaseModel):
+    blueprintId: str
+    title: Optional[str] = "Boomi Integration Blueprint"
+    stages: List[BlueprintStage]
+    businessRule: Optional[str] = ""
+    settings: Optional[Dict[str, Any]] = None
+
+class BuildBlueprintRequest(BaseModel):
+    processName: str
+    stages: List[BlueprintStage]
+    description: Optional[str] = "Built from the BoomiOps Visual Architecture Compiler"
+    folderId: Optional[str] = "Rjo4ODQyMTg1"
+    dryRun: bool = False
+
+class PlannedShape(BaseModel):
+    label: str
+    kind: str
+    placeholder: bool
+    reason: str = ""
+    call: str = ""
+    configure: bool = False
+
+class BuildBlueprintResponse(BaseModel):
+    dryRun: bool
+    shapes: List[PlannedShape]
+    success: bool = False
+    componentId: str = ""
+    name: str = ""
+    folder: str = ""
+    message: str = ""
+    components: List[Dict[str, str]] = []
+
+class SavedBlueprint(BaseModel):
+    id: Optional[str] = None
+    blueprintId: str
+    title: str = ""
+    selectedPresetId: Optional[str] = None
+    stages: List[BlueprintStage]
+    businessRule: str = ""
+    settings: Dict[str, Any] = {}
+    processName: str = ""
+    status: str = "draft"  # 'draft' until it is sent to Boomi, then 'sent'
+    sentAt: Optional[str] = None
+    buildResult: Optional[Dict[str, Any]] = None
+    updatedAt: Optional[str] = None
+
+class GenerateBlueprintPromptResponse(BaseModel):
+    prompt: str
+    status: str = "success"
+    modelUsed: str = "gpt-4o-mini"
+    generatedAt: str
+    source: str = "openai"

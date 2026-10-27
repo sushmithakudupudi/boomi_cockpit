@@ -561,6 +561,90 @@ class BoomiService:
                 logger.warning(f"Error creating Boomi process component ({res.status_code}): {res.text}")
                 raise RuntimeError(f"Boomi API returned {res.status_code}: {res.text[:200]}")
 
+    async def _post_component(self, client: httpx.AsyncClient, auth: Any, url: str, xml_payload: str, what: str) -> ET.Element:
+        res = await client.post(
+            url, auth=auth, content=xml_payload,
+            headers={"Content-Type": "application/xml", "Accept": "application/xml"},
+        )
+        if res.status_code not in (200, 201):
+            logger.warning(f"Error creating {what} ({res.status_code}): {res.text}")
+            raise RuntimeError(f"Boomi API rejected the {what} ({res.status_code}): {res.text[:300]}")
+        return ET.fromstring(res.text)
+
+    async def create_process_from_blueprint(
+        self,
+        name: str,
+        description: str,
+        folder_id: str,
+        plan: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Creates the connection and operation components for connector shapes, then the process."""
+        import re
+        from .boomi_process_builder import (
+            build_process_xml, build_rest_connection_xml, build_rest_operation_xml, safe_process_name,
+        )
+
+        auth = self._get_boomi_auth()
+        if not auth or not settings.BOOMI_ACCOUNT_ID:
+            raise ValueError("Boomi credentials not configured.")
+
+        safe_name = safe_process_name(name)
+        account = settings.BOOMI_ACCOUNT_ID.strip()
+        base = settings.BOOMI_BASE_URL.rstrip("/")
+        url = f"{base}/{account}/Component"
+        components: List[Dict[str, str]] = []
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            connectors = [e for e in plan if e["kind"] == "connectoraction"]
+            try:
+                if connectors:
+                    conn_name = f"{safe_name}_Platform_API_Connection"
+                    root = await self._post_component(
+                        client, auth, url,
+                        build_rest_connection_xml(
+                            conn_name,
+                            "REST Client connection to the Boomi Platform API. Enter the API token username and password before running.",
+                            folder_id, f"{base}/{account}",
+                        ),
+                        "connection component",
+                    )
+                    conn_id = root.attrib.get("componentId", "")
+                    components.append({"type": "connection", "name": conn_name, "id": conn_id})
+                    for e in connectors:
+                        op_name = f"{safe_name}_{re.sub(r'[^A-Za-z0-9]+', '_', e['label']).strip('_') or 'Call'}_Operation"
+                        root = await self._post_component(
+                            client, auth, url,
+                            build_rest_operation_xml(op_name, f"{e['call']} against the Boomi Platform API", folder_id, e["method"], e["path"]),
+                            f"operation component for '{e['label']}'",
+                        )
+                        op_id = root.attrib.get("componentId", "")
+                        components.append({"type": "operation", "name": op_name, "id": op_id})
+                        e["connectionId"], e["operationId"] = conn_id, op_id
+
+                root = await self._post_component(
+                    client, auth, url,
+                    build_process_xml(safe_name, description, folder_id, plan),
+                    "process component",
+                )
+            except RuntimeError as err:
+                if components:
+                    made = ", ".join(f"{c['name']} ({c['id']})" for c in components)
+                    raise RuntimeError(f"{err} Already created and left in Boomi: {made}") from err
+                raise
+
+        comp_id = root.attrib.get("componentId", "")
+        created = root.attrib.get("name", safe_name)
+        if comp_id:
+            asyncio.create_task(self.get_topology(comp_id))
+        return {
+            "success": True,
+            "componentId": comp_id,
+            "name": created,
+            "folder": root.attrib.get("folderFullPath", ""),
+            "message": f"Process '{created}' created with {len(plan)} shapes and {len(components)} connector components.",
+            "components": components,
+        }
+
     def reset(self) -> None:
         """Refreshes real data from Boomi AtomSphere."""
         self._reprocessed_count = 0

@@ -5,6 +5,11 @@ from ..models.schemas import (
     TriageResponse,
     BuildProcessRequest,
     BuildProcessResponse,
+    BuildBlueprintRequest,
+    BuildBlueprintResponse,
+    SavedBlueprint,
+    GenerateBlueprintPromptRequest,
+    GenerateBlueprintPromptResponse,
 )
 from ..services.companion_ai import companion_ai_service
 from ..services.boomi_service import boomi_service
@@ -40,6 +45,60 @@ async def build_boomi_process(req: BuildProcessRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/build-blueprint", response_model=BuildBlueprintResponse)
+async def build_blueprint_process(req: BuildBlueprintRequest):
+    """
+    Creates a Boomi process whose shapes follow the Architecture Compiler canvas.
+    With dryRun=true it only returns the shape plan and writes nothing to Boomi.
+    """
+    from ..services.boomi_process_builder import plan_shapes
+
+    plan = plan_shapes(req.stages)
+    shapes = [
+        {"label": p["label"], "kind": p["kind"], "placeholder": p["placeholder"], "reason": p["reason"], "call": p.get("call", ""), "configure": p.get("configure", False)}
+        for p in plan
+    ]
+    if req.dryRun:
+        return BuildBlueprintResponse(dryRun=True, shapes=shapes)
+    try:
+        result = await boomi_service.create_process_from_blueprint(
+            name=req.processName,
+            description=req.description or "",
+            folder_id=req.folderId or "Rjo4ODQyMTg1",
+            plan=plan,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return BuildBlueprintResponse(dryRun=False, shapes=shapes, **result)
+
+@router.get("/blueprints", response_model=list[SavedBlueprint])
+async def list_blueprints():
+    """Saved Architecture Compiler blueprints, most recently updated first."""
+    from ..services import blueprint_store
+    return blueprint_store.list_all()
+
+@router.get("/blueprints/{blueprint_id}", response_model=SavedBlueprint)
+async def get_blueprint(blueprint_id: str):
+    from ..services import blueprint_store
+    doc = blueprint_store.get(blueprint_id) if blueprint_store.valid_id(blueprint_id) else None
+    if not doc:
+        raise HTTPException(status_code=404, detail="Blueprint not found")
+    return doc
+
+@router.put("/blueprints/{blueprint_id}", response_model=SavedBlueprint)
+async def save_blueprint(blueprint_id: str, req: SavedBlueprint):
+    from ..services import blueprint_store
+    if not blueprint_store.valid_id(blueprint_id):
+        raise HTTPException(status_code=400, detail="Blueprint id may only contain letters, digits, - and _")
+    return blueprint_store.put(blueprint_id, req.model_dump(exclude={"id", "updatedAt"}))
+
+@router.delete("/blueprints/{blueprint_id}")
+async def delete_blueprint(blueprint_id: str):
+    from ..services import blueprint_store
+    if not blueprint_store.valid_id(blueprint_id) or not blueprint_store.delete(blueprint_id):
+        raise HTTPException(status_code=404, detail="Blueprint not found")
+    return {"deleted": blueprint_id}
+
 @router.post("/triage/{execution_id}", response_model=TriageResponse)
 async def triage_execution(execution_id: str):
     """
@@ -53,3 +112,17 @@ async def triage_execution(execution_id: str):
     
     triage = await companion_ai_service.triage_execution_async(record)
     return triage
+
+@router.post("/generate-spec", response_model=GenerateBlueprintPromptResponse)
+async def generate_blueprint_spec(req: GenerateBlueprintPromptRequest):
+    """
+    Synthesizes an expert Boomi Companion prompt customized to the integration pipeline
+    using OpenAI (gpt-4o-mini).
+    """
+    result = await companion_ai_service.generate_blueprint_prompt(
+        blueprint_id=req.blueprintId,
+        stages=req.stages,
+        business_rule=req.businessRule or "",
+        settings=req.settings
+    )
+    return GenerateBlueprintPromptResponse(**result)

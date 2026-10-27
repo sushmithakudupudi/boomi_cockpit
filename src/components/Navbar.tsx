@@ -6,7 +6,8 @@ import {
   Bell, 
   Search, 
   RefreshCw,
-  Cpu
+  Cpu,
+  Wand2
 } from 'lucide-react';
 import type { AtomHealth } from '../types/boomi';
 import { mockAtoms } from '../data/mockData';
@@ -19,6 +20,8 @@ interface NavbarProps {
   onRefresh?: () => void;
   sectionLabel: string;
   pageLabel: string;
+  activeModule?: string;
+  onSelectModule?: (mod: 'healing' | 'compiler') => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -29,6 +32,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onRefresh,
   sectionLabel,
   pageLabel,
+  activeModule,
+  onSelectModule,
 }) => {
   const currentAtom = atom || mockAtoms[0];
   const isOnline = currentAtom.status === 'ONLINE';
@@ -99,6 +104,22 @@ export const Navbar: React.FC<NavbarProps> = ({
             <Bell className="w-4 h-4" />
             <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500" />
           </button>
+
+          {/* Architecture Compiler Toggle Button */}
+          {onSelectModule && (
+            <button
+              onClick={() => onSelectModule(activeModule === 'compiler' ? 'healing' : 'compiler')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer border ${
+                activeModule === 'compiler'
+                  ? 'bg-purple-600 text-white border-purple-400 shadow-lg shadow-purple-900/40'
+                  : 'bg-purple-950/40 text-purple-300 border-purple-500/30 hover:bg-purple-900/50'
+              }`}
+              title="Toggle Visual Architecture Compiler"
+            >
+              <Wand2 className="w-3.5 h-3.5 text-purple-300" />
+              <span className="hidden sm:inline">AI Compiler</span>
+            </button>
+          )}
 
           {/* Boomi Companion Pill Button */}
           <button

@@ -176,4 +176,102 @@ export const api = {
     if (!res.ok) throw new Error(`HTTP error ${res.status}`);
     return await res.json();
   },
+
+  // Build (or dry-run) a Boomi process from Architecture Compiler stages
+  async buildBlueprint(req: {
+    processName: string;
+    stages: any[];
+    description?: string;
+    dryRun?: boolean;
+  }): Promise<{
+    dryRun: boolean;
+    shapes: { label: string; kind: string; placeholder: boolean; reason: string; call?: string; configure?: boolean }[];
+    components?: { type: string; name: string; id: string }[];
+    componentId: string;
+    name: string;
+    folder: string;
+    message: string;
+  }> {
+    const res = await fetch(`${BASE_URL}/companion/build-blueprint`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req),
+    });
+    if (!res.ok) {
+      const detail = await res.json().then(j => j.detail).catch(() => '');
+      throw new Error(detail || `HTTP error ${res.status}`);
+    }
+    return await res.json();
+  },
+
+  // Saved Architecture Compiler blueprint (backend file store). Returns null when none is saved or the backend is down.
+  // 'missing' (404) means nothing saved yet; 'error' means the backend could not be reached or failed.
+  // Callers must not overwrite saved data on 'error'.
+  async loadBlueprint(id: string): Promise<
+    { state: 'ok'; doc: Record<string, any> } | { state: 'missing' } | { state: 'error' }
+  > {
+    try {
+      const res = await fetch(`${BASE_URL}/companion/blueprints/${id}`);
+      if (res.status === 404) return { state: 'missing' };
+      if (!res.ok) return { state: 'error' };
+      return { state: 'ok', doc: await res.json() };
+    } catch {
+      return { state: 'error' };
+    }
+  },
+
+  // All saved blueprints (drafts and sent), newest first. null when the backend is unreachable.
+  async listBlueprints(): Promise<Record<string, any>[] | null> {
+    try {
+      const res = await fetch(`${BASE_URL}/companion/blueprints`);
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  },
+
+  async deleteBlueprint(id: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${BASE_URL}/companion/blueprints/${id}`, { method: 'DELETE' });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  },
+
+  async saveBlueprint(id: string, doc: Record<string, any>): Promise<boolean> {
+    try {
+      const res = await fetch(`${BASE_URL}/companion/blueprints/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(doc),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  },
+
+  // 11. Generate Boomi Companion Spec with OpenAI
+  async generateBlueprintSpec(req: {
+    blueprintId: string;
+    title?: string;
+    stages: any[];
+    businessRule?: string;
+    settings?: Record<string, any>;
+  }): Promise<{ prompt: string; source: string; modelUsed: string } | null> {
+    try {
+      const res = await fetch(`${BASE_URL}/companion/generate-spec`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(req),
+      });
+      if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+      return await res.json();
+    } catch (err) {
+      console.warn('Backend /api/companion/generate-spec unreachable, using fallback generator:', err);
+      return null;
+    }
+  },
 };

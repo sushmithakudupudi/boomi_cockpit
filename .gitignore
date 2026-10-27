@@ -30,3 +30,6 @@ backend/.env
 # Python
 __pycache__/
 *.pyc
+
+# Saved compiler blueprints
+backend/storage/
