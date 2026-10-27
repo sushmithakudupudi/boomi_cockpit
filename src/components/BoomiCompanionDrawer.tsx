@@ -28,15 +28,35 @@ export const BoomiCompanionDrawer: React.FC<BoomiCompanionDrawerProps> = ({
     {
       id: 'msg-1',
       sender: 'companion',
-      text: "👋 Hello! I am your Boomi Companion Operations Copilot. I'm actively monitoring your Atoms and Process Executions. I've detected a critical failure in `SAP_to_Salesforce_Order_Sync`. How can I assist you?",
+      text: "👋 Hello! I am your Boomi Companion Operations Copilot. I'm actively monitoring your Atoms and Process Executions. How can I assist you?",
       timestamp: 'Just now',
-      suggestedAction: {
-        type: 'INSPECT_PAYLOAD',
-        label: 'Triage SAP_to_Salesforce_Order_Sync (exec-8921)',
-        executionId: 'exec-8921',
-      }
     }
   ]);
+
+  // Announce live failures as they appear, once per execution, instead of a canned incident
+  const announcedRef = useRef<Set<string>>(new Set());
+  const activeFailure = executions.find(e => e.status === 'ERROR' && !e.reprocessed);
+
+  useEffect(() => {
+    if (!activeFailure || announcedRef.current.has(activeFailure.id)) return;
+    announcedRef.current.add(activeFailure.id);
+    // errorShapeName is a backend guess from the process name, so it is not shown here
+    const reason = activeFailure.errorMessage ? `\n\n${activeFailure.errorMessage.slice(0, 220)}` : '';
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `alert-${activeFailure.id}`,
+        sender: 'companion',
+        text: `🚨 I detected a failure in \`${activeFailure.processName}\` on ${activeFailure.atomName}.${reason}`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        suggestedAction: {
+          type: 'INSPECT_PAYLOAD',
+          label: `Triage ${activeFailure.processName}`,
+          executionId: activeFailure.id,
+        },
+      },
+    ]);
+  }, [activeFailure]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -51,12 +71,18 @@ export const BoomiCompanionDrawer: React.FC<BoomiCompanionDrawerProps> = ({
     }
   }, [messages, isOpen]);
 
-  const quickPrompts = [
-    "Build XML to JSON employee mapper",
-    "Why did exec-8921 fail?",
-    "Show blast radius for SAP Connector",
-    "Auto-heal & reprocess DOC-SAP-98124"
-  ];
+  const quickPrompts = activeFailure
+    ? [
+        `Why did ${activeFailure.processName} fail?`,
+        `Show blast radius for ${activeFailure.processName}`,
+        `Auto-heal & reprocess ${activeFailure.processName}`,
+        'How do I build a process?',
+      ]
+    : [
+        'Are any executions failing?',
+        'Summarize platform health',
+        'How do I build a process?',
+      ];
 
   const handleSendMessage = async (textToSend?: string) => {
     const query = (textToSend || inputValue).trim();
@@ -97,50 +123,16 @@ export const BoomiCompanionDrawer: React.FC<BoomiCompanionDrawerProps> = ({
     if (!action) return;
 
     if (action.type === 'BUILD_PROCESS') {
-      const procName = action.executionId || 'Employee_XML_to_JSON_Mapper';
-      setIsTyping(true);
-      try {
-        const buildRes = await api.buildProcess(procName);
-        const compId = buildRes.componentId;
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `comp-build-${Date.now()}`,
-            sender: 'companion',
-            text: `🎉 **Process Successfully Built & Published in Dell Boomi AtomSphere!**\n\n• **Process Name:** \`${buildRes.name}\`\n• **Component ID:** \`${compId}\`\n• **AtomSphere Folder:** \`${buildRes.folder}\`\n\nThe integration workflow has been provisioned on the Dell Boomi platform. Click below to inspect the live process canvas in the cockpit.`,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            suggestedAction: {
-              type: 'VIEW_FLOW',
-              label: `Inspect Flow: ${buildRes.name}`,
-              executionId: compId,
-            }
-          }
-        ]);
-        onOpenFlow({
-          id: `exec-new-${Date.now()}`,
-          processId: compId,
-          processName: buildRes.name,
-          atomName: 'ESI-PC16.easystepin.com',
-          environment: 'ESI_QA',
-          status: 'SUCCESS',
-          startedAt: new Date().toISOString(),
-          durationMs: 850,
-          inboundDocs: 1,
-          outboundDocs: 1,
-        });
-      } catch (err) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `comp-err-${Date.now()}`,
-            sender: 'companion',
-            text: `⚠️ Error building process in Boomi: ${err instanceof Error ? err.message : String(err)}`,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          }
-        ]);
-      } finally {
-        setIsTyping(false);
-      }
+      // The chat only produces text, so it cannot build the user's design. Send them to the compiler.
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `comp-build-${Date.now()}`,
+          sender: 'companion',
+          text: 'To build a process in Boomi, open the **Architecture Compiler** tab, lay out your shapes and click **Build in Boomi**. You will see the exact shape list and confirm it before anything is created.',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        }
+      ]);
     } else if (action.type === 'REPROCESS' && action.executionId) {
       onTriggerAutoHeal(action.executionId);
     } else if (action.type === 'VIEW_FLOW' && action.executionId) {

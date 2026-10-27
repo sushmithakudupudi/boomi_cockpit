@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
-import { Sidebar, PLACEHOLDER_MODULES, type AppModule, type HealingTab } from './components/Sidebar';
+import { Sidebar, PLACEHOLDER_MODULES, type AppModule, type HealingTab, type CompilerView } from './components/Sidebar';
+import { CompilerRecordsPage, type BlueprintRecord } from './components/CompilerRecordsPage';
 import { StatsOverview } from './components/StatsOverview';
 import { ProcessFlowGraph } from './components/ProcessFlowGraph';
 import { LiveProcessFeed } from './components/LiveProcessFeed';
@@ -8,6 +9,7 @@ import { ProcessReportingPage } from './components/ProcessReportingPage';
 import { RevisionHistoryPage } from './components/revisions/RevisionHistoryPage';
 import { TriageModal } from './components/TriageModal';
 import { BoomiCompanionDrawer } from './components/BoomiCompanionDrawer';
+import { VisualArchitectureCompiler } from './components/VisualArchitectureCompiler';
 import { api } from './services/api';
 import type { ExecutionRecord, AtomHealth } from './types/boomi';
 import { 
@@ -19,8 +21,14 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
+const newBlueprintId = () => `bp-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+
 export function App() {
-  const [activeModule, setActiveModule] = useState<AppModule>('healing');
+  const [activeModule, setActiveModule] = useState<AppModule>('compiler');
+  // Architecture Compiler: the editor, the Draft list, or the Sent list
+  const [compilerView, setCompilerView] = useState<CompilerView>('editor');
+  const [blueprintId, setBlueprintId] = useState<string | null>(null);
+  const [records, setRecords] = useState<BlueprintRecord[]>([]);
   const [activeTab, setActiveTab] = useState<HealingTab>('cockpit');
   const activePlaceholder = PLACEHOLDER_MODULES.find(m => m.id === activeModule);
   const [executions, setExecutions] = useState<ExecutionRecord[]>([]);
@@ -34,6 +42,67 @@ export function App() {
   // Real process selection for Flow Chart
   const [selectedProcessId, setSelectedProcessId] = useState<string>('94348d68-6d4e-4679-90be-a35219a02116');
   const [selectedProcessName, setSelectedProcessName] = useState<string>('Modbus_Read_Test_Process');
+
+  const refreshRecords = async (): Promise<BlueprintRecord[] | null> => {
+    const list = (await api.listBlueprints()) as BlueprintRecord[] | null;
+    if (list) setRecords(list);
+    return list;
+  };
+
+  // Resume the most recent draft on start, or begin a fresh one
+  useEffect(() => {
+    refreshRecords().then((list) => {
+      const latestDraft = list?.find((r) => r.status !== 'sent');
+      setBlueprintId(latestDraft?.id ?? newBlueprintId());
+    });
+  }, []);
+
+  const drafts = records.filter((r) => r.status !== 'sent');
+  const sent = records.filter((r) => r.status === 'sent');
+
+  const handleCompilerView = (view: CompilerView) => {
+    setActiveModule('compiler');
+    if (view === 'editor') {
+      setBlueprintId(newBlueprintId()); // "+ New" always starts a fresh blueprint
+    }
+    setCompilerView(view);
+    refreshRecords();
+  };
+
+  const handleOpenDraft = (record: BlueprintRecord) => {
+    setBlueprintId(record.id);
+    setCompilerView('editor');
+  };
+
+  const handleDeleteRecord = async (record: BlueprintRecord) => {
+    // Confirmation happens in the records list; window.confirm is blocked in some embedded browsers
+    const ok = await api.deleteBlueprint(record.id);
+    if (!ok) {
+      showToast('Could not delete. Is the backend running?');
+      return;
+    }
+    if (record.id === blueprintId) setBlueprintId(newBlueprintId());
+    await refreshRecords();
+    showToast(record.status === 'sent' ? 'Record removed. The process in Boomi is not deleted.' : 'Draft deleted.');
+  };
+
+  const handleDuplicate = async (record: BlueprintRecord) => {
+    const id = newBlueprintId();
+    const { id: _oldId, updatedAt: _u, ...rest } = record as BlueprintRecord & Record<string, unknown>;
+    void _oldId; void _u;
+    await api.saveBlueprint(id, {
+      ...rest,
+      title: `${record.title || 'Blueprint'} (copy)`,
+      status: 'draft',
+      sentAt: null,
+      buildResult: null,
+      processName: '',
+    });
+    await refreshRecords();
+    setBlueprintId(id);
+    setCompilerView('editor');
+    showToast('Copied to a new draft.');
+  };
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -144,6 +213,10 @@ export function App() {
           setActiveModule('healing');
           setActiveTab(tab);
         }}
+        compilerView={compilerView}
+        onCompilerView={handleCompilerView}
+        draftCount={drafts.length}
+        sentCount={sent.length}
         healingAlertCount={failedCount}
         executionsCount={executions.length}
         atom={atoms[0]}
@@ -166,18 +239,49 @@ export function App() {
         isBackendConnected={isBackendConnected}
         atom={atoms[0]}
         onRefresh={handleResetDemo}
-        sectionLabel={activePlaceholder?.label ?? (activeModule === 'revisions' ? 'Revision History' : 'Self-Healing')}
+        sectionLabel={
+          activeModule === 'compiler' ? 'Visual Architecture'
+            : activeModule === 'revisions' ? 'Revision History'
+            : (activePlaceholder?.label ?? 'Self-Healing')
+        }
         pageLabel={
           activeModule === 'healing'
             ? (activeTab === 'cockpit' ? 'Live Cockpit' : 'Process Reporting')
-            : activeModule === 'revisions' ? 'Revision History' : 'Overview'
+            : activeModule === 'compiler'
+              ? (compilerView === 'draft' ? 'Draft' : compilerView === 'sent' ? 'Sent' : 'New')
+              : activeModule === 'revisions' ? 'Revision History' : 'Overview'
         }
       />
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         
-        {activePlaceholder ? (
+        {activeModule === 'compiler' ? (
+          compilerView === 'editor' ? (
+            blueprintId && (
+              <VisualArchitectureCompiler
+                key={blueprintId}
+                blueprintId={blueprintId}
+                onShowToast={showToast}
+                onSaved={refreshRecords}
+                onSent={() => {
+                  refreshRecords();
+                  setCompilerView('sent');
+                  setBlueprintId(newBlueprintId());
+                }}
+              />
+            )
+          ) : (
+            <CompilerRecordsPage
+              kind={compilerView}
+              records={compilerView === 'draft' ? drafts : sent}
+              onOpen={handleOpenDraft}
+              onDelete={handleDeleteRecord}
+              onDuplicate={handleDuplicate}
+              onNew={() => handleCompilerView('editor')}
+            />
+          )
+        ) : activePlaceholder ? (
           /* Placeholder page for modules not built yet */
           <div className="flex flex-col items-center justify-center text-center py-32 rounded-2xl border border-dashed border-slate-700 bg-slate-900/40">
             <div className="p-3 rounded-xl bg-boomi-blue/20 border border-boomi-blue/40 text-boomi-accent mb-3">

@@ -35,32 +35,16 @@ class CompanionAIService:
         # Check for immediate approval to build process
         clean_p = prompt.strip().lower()
         if clean_p in ["proceed", "yes proceed", "build it", "build in boomi", "go ahead", "build the process", "yes please proceed"]:
-            try:
-                build_res = await boomi_service.create_process_component(
-                    name="Employee_XML_to_JSON_Mapper",
-                    description="Autonomous Boomi Companion integration process for XML to JSON mapping"
-                )
-                comp_id = build_res.get("componentId")
-                return CompanionMessage(
-                    id=msg_id,
-                    sender="companion",
-                    text=(
-                        f"🚀 **Process Successfully Built in Dell Boomi AtomSphere!**\n\n"
-                        f"• **Process Name:** `{build_res['name']}`\n"
-                        f"• **Boomi Component ID:** `{comp_id}`\n"
-                        f"• **Target Folder:** `{build_res['folder']}`\n"
-                        f"• **Shapes Configured:** Inbound Start Feed ➔ Data Process / Transform ➔ Process End.\n\n"
-                        f"The process is live in your AtomSphere Component Explorer. Click below to inspect its topology canvas in the cockpit."
-                    ),
-                    timestamp=now_time,
-                    suggestedAction=SuggestedAction(
-                        type="VIEW_FLOW",
-                        label=f"Inspect in Flow Canvas: {build_res['name']}",
-                        executionId=comp_id
-                    )
-                )
-            except Exception as e:
-                logger.warning(f"Error auto-building process: {e}")
+            # Chat has no blueprint to build from; the old canned XML-to-JSON template ignored the user's design.
+            return CompanionMessage(
+                id=msg_id,
+                sender="companion",
+                text=(
+                    "To build a process in Boomi, open the **Architecture Compiler** tab, lay out your shapes and "
+                    "click **Build in Boomi**. You will see the exact shape list and confirm it before anything is created."
+                ),
+                timestamp=now_time,
+            )
 
         # If OpenAI is configured, invoke realistic generative reasoning
         if self._openai_client:
@@ -385,4 +369,77 @@ OUTPUT CONVENTIONS:
             payload=execution.get("payload")
         )
 
+    async def generate_blueprint_prompt(
+        self,
+        blueprint_id: str,
+        stages: list,
+        business_rule: str,
+        settings: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Builds the Boomi Companion prompt deterministically from the canvas so every
+        shape, name and note survives, then (when OpenAI is configured) appends a short
+        review section. OpenAI never rewrites the spec itself: free rewriting dropped
+        shapes and invented directives.
+        """
+        from .boomi_blueprint_engine import _as_dict, describe_canvas, generate_fallback_blueprint_prompt
+
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        stage_dicts = [_as_dict(s) for s in stages]
+        source_name = stage_dicts[0].get("selectedShapeOrConnector", "REST API") if stage_dicts else "REST API"
+        target = next(
+            (d for d in stage_dicts if d.get("category") == "DESTINATION"),
+            stage_dicts[-1] if stage_dicts else {},
+        )
+        target_name = target.get("selectedShapeOrConnector", "Salesforce")
+
+        spec = generate_fallback_blueprint_prompt(
+            blueprint_id=blueprint_id,
+            source_name=source_name,
+            target_name=target_name,
+            stages=stages,
+            business_rule=business_rule,
+            settings=settings
+        )
+
+        if self._openai_client:
+            try:
+                response = await self._openai_client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": (
+                            "You are a senior Dell Boomi integration architect reviewing a build plan before it is "
+                            "handed to Boomi Companion. Do NOT rewrite or restate the plan. Reply with at most 6 short "
+                            "bullets of concrete risks or clarifying questions about the listed canvas "
+                            "(for example missing credentials, an undefined object name, or an ordering problem). "
+                            "Do not invent requirements, properties or shapes that are not listed."
+                        )},
+                        {"role": "user", "content": (
+                            f"Canvas, left to right:\n{describe_canvas(stages)}\n\n"
+                            f"Business rule: {business_rule or 'none specified'}"
+                        )},
+                    ],
+                    temperature=0.2,
+                    max_tokens=400
+                )
+                review = (response.choices[0].message.content or "").strip()
+                if review:
+                    spec += f"\n\n## Review notes (AI-suggested, non-binding)\n{review}\n"
+                return {
+                    "prompt": spec,
+                    "status": "success",
+                    "modelUsed": "gpt-4o-mini",
+                    "generatedAt": now_str,
+                    "source": "openai"
+                }
+            except Exception as e:
+                logger.warning(f"OpenAI review for blueprint prompt failed ({e}); returning the rules-engine spec.")
+
+        return {
+            "prompt": spec,
+            "status": "success",
+            "modelUsed": "domain-rules-engine",
+            "generatedAt": now_str,
+            "source": "domain_engine"
+        }
 companion_ai_service = CompanionAIService()

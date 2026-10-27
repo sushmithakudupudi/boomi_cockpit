@@ -9,16 +9,21 @@ import {
   ChevronDown,
   PanelLeftClose,
   PanelLeftOpen,
-  Server
+  Server,
+  Wand2,
+  Plus,
+  FileEdit,
+  Send
 } from 'lucide-react';
 import type { AtomHealth } from '../types/boomi';
 
-export type AppModule = 'healing' | 'revisions' | 'module3';
+export type AppModule = 'healing' | 'compiler' | 'revisions' | 'module3';
 export type HealingTab = 'cockpit' | 'reporting';
+export type CompilerView = 'editor' | 'draft' | 'sent';
 
 // Placeholder modules — rename / fill in as each one gets built
-export const PLACEHOLDER_MODULES: { id: Exclude<AppModule, 'healing' | 'revisions'>; label: string; hint: string; icon: React.ElementType }[] = [
-  { id: 'module3', label: 'New Module 2', hint: 'Coming soon', icon: Layers3 },
+export const PLACEHOLDER_MODULES: { id: Exclude<AppModule, 'healing' | 'compiler' | 'revisions'>; label: string; hint: string; icon: React.ElementType }[] = [
+  { id: 'module3', label: 'Component Catalog', hint: 'Coming soon', icon: Layers3 },
 ];
 
 interface SidebarProps {
@@ -26,6 +31,10 @@ interface SidebarProps {
   onModuleChange: (module: AppModule) => void;
   activeTab: HealingTab;
   onTabChange: (tab: HealingTab) => void;
+  compilerView: CompilerView;
+  onCompilerView: (view: CompilerView) => void;
+  draftCount?: number;
+  sentCount?: number;
   healingAlertCount?: number;
   executionsCount?: number;
   atom?: AtomHealth;
@@ -54,12 +63,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onModuleChange,
   activeTab,
   onTabChange,
+  compilerView,
+  onCompilerView,
+  draftCount = 0,
+  sentCount = 0,
   healingAlertCount = 0,
   executionsCount = 0,
   atom,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(readCollapsed);
   const [isHealingOpen, setIsHealingOpen] = useState(true);
+  const [isCompilerOpen, setIsCompilerOpen] = useState(true);
 
   const toggleCollapsed = () => {
     const next = !isCollapsed;
@@ -91,6 +105,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         onClick={() => {
           onModuleChange(id);
           if (id === 'healing') setIsHealingOpen(isActive ? !isHealingOpen : true);
+          if (id === 'compiler') setIsCompilerOpen(isActive ? !isCompilerOpen : true);
         }}
         className={`group relative w-full flex items-center gap-3 rounded-xl transition cursor-pointer ${
           isCollapsed ? 'justify-center p-2.5' : 'px-3 py-2.5'
@@ -151,6 +166,59 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <nav className={`flex-1 p-3 space-y-1 ${isCollapsed ? '' : 'overflow-y-auto'}`}>
         {!isCollapsed && (
           <div className="px-2 pb-2 text-[10px] uppercase font-bold tracking-wider text-slate-500">Modules</div>
+        )}
+
+        {moduleButton(
+          'compiler',
+          'Architecture Compiler',
+          'Blueprint & Spec Prompt',
+          Wand2,
+          <ChevronDown
+            className={`w-3.5 h-3.5 text-slate-500 transition-transform ${
+              isCompilerOpen && activeModule === 'compiler' ? '' : '-rotate-90'
+            }`}
+          />
+        )}
+
+        {/* Compiler sub-pages: new blueprint, drafts, and blueprints already sent to Boomi */}
+        {activeModule === 'compiler' && isCompilerOpen && (
+          <div className={isCollapsed ? 'space-y-1 pt-1' : 'ml-7 pl-3 border-l border-slate-800 space-y-0.5 py-1'}>
+            {([
+              { id: 'editor', label: '+ New', icon: Plus, count: undefined },
+              { id: 'draft', label: 'Draft', icon: FileEdit, count: draftCount },
+              { id: 'sent', label: 'Sent', icon: Send, count: sentCount },
+            ] as { id: CompilerView; label: string; icon: React.ElementType; count?: number }[]).map(({ id, label, icon: Icon, count }) => {
+              const isActive = compilerView === id;
+              return (
+                <button
+                  key={id}
+                  onClick={() => onCompilerView(id)}
+                  className={`group relative w-full flex items-center gap-2.5 rounded-lg text-xs transition cursor-pointer ${
+                    isCollapsed ? 'justify-center p-2' : 'px-2.5 py-1.5'
+                  } ${
+                    isActive
+                      ? 'bg-slate-800 text-white font-semibold'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                  }`}
+                >
+                  <Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-boomi-accent' : ''}`} />
+                  {!isCollapsed && (
+                    <>
+                      <span className="flex-1 text-left truncate">{label}</span>
+                      {count !== undefined && (
+                        <span className={`text-[10px] px-1.5 rounded-full font-bold ${
+                          isActive ? 'bg-sky-400/25 text-sky-200' : 'bg-slate-800 text-slate-500'
+                        }`}>
+                          {count}
+                        </span>
+                      )}
+                    </>
+                  )}
+                  <Tooltip label={label} show={isCollapsed} />
+                </button>
+              );
+            })}
+          </div>
         )}
 
         {moduleButton(
