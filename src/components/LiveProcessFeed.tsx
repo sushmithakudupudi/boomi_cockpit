@@ -169,9 +169,9 @@ export const LiveProcessFeed: React.FC<LiveProcessFeedProps> = ({
                 {isError && (
                   <button
                     onClick={() => onSelectExecution(exec)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 font-semibold text-xs border border-rose-500/30 transition cursor-pointer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-pink-500/20 hover:bg-pink-500/30 text-pink-200 font-semibold text-xs border border-pink-500/40 transition cursor-pointer"
                   >
-                    <Sparkles className="w-3.5 h-3.5 text-rose-300" />
+                    <Sparkles className="w-3.5 h-3.5 text-pink-300" />
                     <span>Triage Error</span>
                   </button>
                 )}

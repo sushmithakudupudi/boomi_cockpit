@@ -1,10 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
-  X, 
-  Bot, 
-  Send, 
+  X,
+  Send,
   Zap, 
-  ChevronRight,
   ClipboardList,
   LoaderCircle,
   TriangleAlert,
@@ -17,6 +15,8 @@ import type { CompanionMessage, ExecutionRecord, ProcessDocRef } from '../types/
 import type { Stage } from '../types/compiler';
 import { api } from '../services/api';
 import { MarkdownText } from './MarkdownText';
+import { KeystoneLogo } from './KeystoneLogo';
+import { ChatTriageCard, type ActionOutcome } from './ChatTriageCard';
 import { CATALOG_GROUPS, categorize } from '../services/shapeCatalog';
 
 type PreparedBlueprint = {
@@ -50,7 +50,7 @@ const parseGeneratedBlueprintPrompt = (prompt: string): PreparedBlueprint => {
       missingInfo.push(`Unsupported canvas shape: ${shape.trim()}.`);
       return;
     }
-    const notes = noteTail.trim().replace(/^(?:[—–-]|â€”|Ã¢â‚¬â€�)\s*/, '').trim();
+    const notes = noteTail.trim().replace(/^(?:[â€”â€“-]|Ã¢â‚¬â€|ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½)\s*/, '').trim();
     rawStages.push({
       id: `companion-stage-${index + 1}`,
       stepNumber: `STEP ${String(index + 1).padStart(2, '0')}`,
@@ -99,6 +99,10 @@ interface BoomiCompanionDrawerProps {
   pendingPrompt?: string | null;
   onPromptConsumed?: () => void;
   docRequest?: (ProcessDocRef & { requestId: number }) | null;
+  /** A failed execution to show as a triage card in the chat (instead of a popup) */
+  triageRequest?: { execution: ExecutionRecord; requestId: number } | null;
+  onReprocess?: (executionId: string) => Promise<ActionOutcome>;
+  onRerun?: (execution: ExecutionRecord) => Promise<ActionOutcome>;
 }
 
 const nowLabel = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -113,6 +117,9 @@ export const BoomiCompanionDrawer: React.FC<BoomiCompanionDrawerProps> = ({
   pendingPrompt,
   onPromptConsumed,
   docRequest,
+  triageRequest,
+  onReprocess,
+  onRerun,
 }) => {
   const [messages, setMessages] = useState<CompanionMessage[]>([
     {
@@ -123,48 +130,33 @@ export const BoomiCompanionDrawer: React.FC<BoomiCompanionDrawerProps> = ({
     }
   ]);
 
-  // Announce live failures as they appear, once per execution, instead of a canned incident
-  const announcedRef = useRef<Set<string>>(new Set());
-  const activeFailure = executions.find(e => e.status === 'ERROR' && !e.reprocessed);
-
-  // The first load announces only the top open failure; later ones announce every new failure (max 3, then a summary)
-  const firstPassRef = useRef(true);
-
-  useEffect(() => {
-    if (executions.length === 0) return;
-    const openFailures = executions
-      .filter(e => e.status === 'ERROR' && !e.reprocessed)
-      .sort((x, y) => (y.startedAt || '').localeCompare(x.startedAt || ''));
-    const fresh = openFailures.filter(f => !announcedRef.current.has(f.id));
-    const isFirst = firstPassRef.current;
-    firstPassRef.current = false;
-    if (fresh.length === 0) return;
-    fresh.forEach(f => announcedRef.current.add(f.id));
-
-    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    // errorShapeName is a backend guess from the process name, so it is not shown here
-    const toMessage = (f: ExecutionRecord): CompanionMessage => ({
-      id: `alert-${f.id}`,
-      sender: 'companion',
-      text: `🚨 I detected a failure in \`${f.processName}\` on ${f.atomName}.${f.errorMessage ? `
-
-${f.errorMessage.slice(0, 220)}` : ''}`,
-      timestamp: time,
-      suggestedAction: { type: 'INSPECT_PAYLOAD', label: `Triage ${f.processName}`, executionId: f.id },
-    });
-
-    const shown = isFirst ? fresh.slice(0, 1) : fresh.slice(0, 3);
-    const extra: CompanionMessage[] = !isFirst && fresh.length > 3
-      ? [{ id: `alert-more-${fresh[0].id}`, sender: 'companion', text: `…and ${fresh.length - 3} more new failures. Open the bell icon to see them all.`, timestamp: time }]
-      : [];
-    setMessages((prev) => [...prev, ...shown.map(toMessage), ...extra]);
-  }, [executions]);
+  // Failures are listed in the bell; opening one there adds its triage card to this chat
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [buildProposal, setBuildProposal] = useState<CompanionBuildProposal | null>(null);
   const [downloading, setDownloading] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const handledDocRequestRef = useRef<number | null>(null);
+  const handledTriageRef = useRef<number | null>(null);
+  const historyRef = useRef<string[]>([]);
+  const historyPos = useRef(-1);
+
+  // Failed executions open as a card inside the chat: the error, plus Reprocess / Re-run / Find the cause
+  const addTriage = (exec: ExecutionRecord) => {
+    setMessages((prev) => [...prev, {
+      id: `triage-${exec.id}-${Date.now()}`,
+      sender: 'companion',
+      text: `Here is the failure in **${exec.processName}**.`,
+      timestamp: nowLabel(),
+      triage: exec,
+    }]);
+  };
+
+  useEffect(() => {
+    if (!triageRequest || handledTriageRef.current === triageRequest.requestId) return;
+    handledTriageRef.current = triageRequest.requestId;
+    addTriage(triageRequest.execution);
+  }, [triageRequest]);
 
   useEffect(() => {
     if (!docRequest || handledDocRequestRef.current === docRequest.requestId) return;
@@ -223,22 +215,18 @@ ${f.errorMessage.slice(0, 220)}` : ''}`,
     }
   }, [messages, isOpen]);
 
-  const quickPrompts = activeFailure
-    ? [
-        `Why did ${activeFailure.processName} fail?`,
-        `Show blast radius for ${activeFailure.processName}`,
-        `Auto-heal & reprocess ${activeFailure.processName}`,
-        'How do I build a process?',
-      ]
-    : [
-        'Are any executions failing?',
-        'Summarize platform health',
-        'How do I build a process?',
-      ];
+  const quickPrompts = [
+    'How do I build a process?',
+    'How many atoms are there?',
+    'Which environments do I have?',
+    'Summarize platform health',
+  ];
 
   const handleSendMessage = async (textToSend?: string) => {
     const query = (textToSend || inputValue).trim();
     if (!query) return;
+    if (historyRef.current[historyRef.current.length - 1] !== query) historyRef.current.push(query);
+    historyPos.current = -1;
     const isBlueprintPrompt = /##\s+Integration Blueprint\s*\(ID:/i.test(query)
       && /^\s*1\.\s+"[^"]+"\s+\[[^\]]+\]/m.test(query);
 
@@ -362,9 +350,12 @@ ${f.errorMessage.slice(0, 220)}` : ''}`,
       }
     } else if (action.type === 'INSPECT_PAYLOAD' && action.executionId) {
       const match = executions.find(e => e.id === action.executionId);
-      if (match) onOpenFlow(match);
+      if (match) addTriage(match);
     }
   };
+
+  // The welcome screen shows until the conversation really starts
+  const hasConversation = messages.some((m) => m.sender === 'user' || m.triage) || Boolean(buildProposal) || isTyping;
 
   if (!isOpen) return null;
 
@@ -375,16 +366,13 @@ ${f.errorMessage.slice(0, 220)}` : ''}`,
       {/* Drawer Header */}
       <div className="flex items-center justify-between p-4 border-b border-boomi-cardBorder bg-slate-900/90 backdrop-blur">
         <div className="flex items-center gap-3">
-          <div className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-tr from-boomi-blue to-boomi-accent text-white shadow-lg shadow-sky-500/25">
-            <Bot className="w-5 h-5" />
+          <div className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-slate-950/80 border border-slate-700/70">
+            <KeystoneLogo className="w-6 h-6" />
             <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 border border-slate-900" />
           </div>
           <div>
             <div className="flex items-center gap-1.5">
               <h3 className="text-sm font-bold text-white">Keystone AI</h3>
-              <span className="text-[10px] px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-300 font-semibold border border-sky-500/30">
-                AI Copilot
-              </span>
             </div>
             <p className="text-[11px] text-slate-400">Contextual Operations & Triage</p>
           </div>
@@ -398,28 +386,28 @@ ${f.errorMessage.slice(0, 220)}` : ''}`,
         </button>
       </div>
 
-      {/* Quick Prompts Carousel */}
-      <div className="p-3 border-b border-boomi-cardBorder bg-slate-950/40">
-        <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-2">
-          Suggested Queries
-        </span>
-        <div className="flex flex-wrap gap-1.5">
-          {quickPrompts.map((prompt, idx) => (
-            <button
-              key={idx}
-              onClick={() => handleSendMessage(prompt)}
-              className="text-[11px] px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700/60 transition cursor-pointer flex items-center gap-1"
-            >
-              <span>{prompt}</span>
-              <ChevronRight className="w-3 h-3 text-slate-500" />
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* Messages Scroll Area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map((msg) => (
+        {!hasConversation && (
+          <div className="flex flex-col items-center text-center pt-8 pb-4">
+            <KeystoneLogo className="w-16 h-16" base />
+            <h2 className="mt-5 text-2xl font-bold text-white">Keystone AI</h2>
+            <p className="mt-1.5 text-sm text-slate-400">Investigate failures, compare revisions and draft integrations</p>
+            <div className="mt-6 flex flex-col items-center gap-2.5 w-full">
+              {quickPrompts.map((prompt, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => handleSendMessage(prompt)}
+                  className="px-4 py-2.5 rounded-2xl bg-slate-800/80 hover:bg-slate-700 text-slate-100 text-sm border border-slate-700/60 transition cursor-pointer max-w-full break-words"
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {messages.filter((m) => hasConversation || m.id !== 'msg-1').map((msg) => (
           <div
             key={msg.id}
             className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}
@@ -431,7 +419,7 @@ ${f.errorMessage.slice(0, 220)}` : ''}`,
             </div>
 
             <div
-              className={`max-w-[90%] rounded-2xl p-3.5 text-xs leading-relaxed shadow-md ${
+              className={`${msg.triage ? 'w-full' : 'max-w-[90%]'} rounded-2xl p-3.5 text-xs leading-relaxed shadow-md ${
                 msg.sender === 'user'
                   ? 'bg-boomi-blue text-white rounded-br-none'
                   : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-bl-none'
@@ -441,6 +429,17 @@ ${f.errorMessage.slice(0, 220)}` : ''}`,
                 <div className="whitespace-pre-wrap">{msg.text}</div>
               ) : (
                 <MarkdownText text={msg.text} hideMermaid={Boolean(msg.codeBlock)} />
+              )}
+
+              {msg.triage && (
+                <div className="mt-3 pt-2.5 border-t border-slate-800">
+                  <ChatTriageCard
+                    execution={msg.triage}
+                    onReprocess={onReprocess ?? (async () => ({ ok: false, message: 'Reprocess is not available here.' }))}
+                    onRerun={onRerun ?? (async () => ({ ok: false, message: 'Re-run is not available here.' }))}
+                    onAskFollowUp={(q) => handleSendMessage(q)}
+                  />
+                </div>
               )}
 
               {/* Detailed documentation downloads */}
@@ -494,7 +493,7 @@ ${f.errorMessage.slice(0, 220)}` : ''}`,
 
         {isTyping && (
           <div className="flex items-center gap-2 text-slate-400 text-xs py-2">
-            <Bot className="w-4 h-4 text-boomi-accent animate-spin" />
+            <KeystoneLogo className="w-4 h-4 animate-pulse" />
             <span>Keystone AI is analyzing Atom telemetry...</span>
           </div>
         )}
@@ -523,22 +522,41 @@ ${f.errorMessage.slice(0, 220)}` : ''}`,
             e.preventDefault();
             handleSendMessage();
           }}
-          className="relative flex items-center"
+          className="rounded-2xl bg-slate-950 border border-slate-700/80 focus-within:border-boomi-accent focus-within:ring-1 focus-within:ring-boomi-accent transition p-2.5"
         >
           <textarea
             value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            placeholder="Ask Keystone AI or paste a generated Integration Blueprint..."
-            rows={3}
-            className="w-full resize-y pl-3.5 pr-10 py-2.5 text-xs rounded-xl bg-slate-950 border border-slate-700/80 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-boomi-accent focus:ring-1 focus:ring-boomi-accent transition"
+            onChange={(e) => { setInputValue(e.target.value); historyPos.current = -1; }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                handleSendMessage();
+              } else if (e.key === 'ArrowUp' && (inputValue === '' || historyPos.current >= 0) && historyRef.current.length > 0) {
+                e.preventDefault();
+                historyPos.current = Math.min(historyPos.current + 1, historyRef.current.length - 1);
+                setInputValue(historyRef.current[historyRef.current.length - 1 - historyPos.current]);
+              } else if (e.key === 'ArrowDown' && historyPos.current >= 0) {
+                e.preventDefault();
+                historyPos.current -= 1;
+                setInputValue(historyPos.current < 0 ? '' : historyRef.current[historyRef.current.length - 1 - historyPos.current]);
+              }
+            }}
+            placeholder="Ask about a failure, process or revision"
+            aria-label="Message Keystone AI"
+            rows={2}
+            className="w-full resize-none bg-transparent text-xs text-slate-100 placeholder-slate-500 focus:outline-none"
           />
-          <button
-            type="submit"
-            disabled={!inputValue.trim()}
-            className="absolute right-1.5 p-1.5 rounded-lg bg-boomi-blue text-white hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
-          >
-            <Send className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center justify-between pt-1.5">
+            <span className="text-[10px] text-slate-500">Enter to send · Shift+Enter for a new line · ↑↓ for history</span>
+            <button
+              type="submit"
+              disabled={!inputValue.trim()}
+              aria-label="Send"
+              className="w-8 h-8 rounded-full bg-boomi-blue text-white hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer flex items-center justify-center"
+            >
+              <Send className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </form>
       </div>
 

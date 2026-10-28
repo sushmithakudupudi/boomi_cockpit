@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { 
-  Bot, 
   Search, 
   RefreshCw,
   LogOut,
@@ -11,6 +10,7 @@ import {
 } from 'lucide-react';
 import type { AtomHealth, ExecutionRecord } from '../types/boomi';
 import { AlertsBell } from './AlertsBell';
+import { KeystoneLogo } from './KeystoneLogo';
 import { useElementWidth } from '../hooks/useElementWidth';
 import { useTheme, type Theme } from '../hooks/useTheme';
 import { useAuth } from './auth/AuthContext';
@@ -99,7 +99,6 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({
   onToggleCompanion,
-  companionUnreadCount,
   onRefresh,
   activeModule,
   onSelectModule,
@@ -174,15 +173,11 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Boomi Companion Pill Button */}
           <button
             onClick={onToggleCompanion}
-            className="flex items-center gap-2 px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-boomi-blue to-sky-500 hover:from-blue-600 hover:to-sky-400 text-white text-xs font-semibold shadow-lg shadow-sky-500/25 border border-sky-400/40 transition-all cursor-pointer"
+            aria-label="Keystone AI"
+            title="Keystone AI"
+            className="relative flex items-center justify-center w-9 h-9 rounded-xl hover:bg-slate-500/15 transition-all cursor-pointer"
           >
-            <Bot className="w-4 h-4" />
-            <span className={`whitespace-nowrap ${barWidth >= 640 ? 'inline' : 'hidden'}`}>Keystone AI</span>
-            {companionUnreadCount > 0 && (
-              <span className="w-5 h-5 rounded-full bg-rose-600 text-white text-[10px] font-bold flex items-center justify-center">
-                {companionUnreadCount}
-              </span>
-            )}
+            <KeystoneLogo className="w-7 h-7" />
           </button>
 
           <UserMenu />

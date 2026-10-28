@@ -66,6 +66,8 @@ export interface CompanionMessage {
   };
   // AI Docs summary of one process revision, with Word/PDF downloads
   processDoc?: ProcessDocRef;
+  // A failed execution shown as a triage card inside the chat (error plus actions, no popup)
+  triage?: ExecutionRecord;
 }
 
 export interface AtomHealth {

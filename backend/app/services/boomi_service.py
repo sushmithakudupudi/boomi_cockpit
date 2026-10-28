@@ -441,6 +441,26 @@ class BoomiService:
             "edges": []
         }
 
+    @staticmethod
+    def _rerun_error(res: "httpx.Response") -> str:
+        """Turns a Boomi RerunDocument failure into a message that says what to do."""
+        detail = ""
+        try:
+            detail = (res.json().get("message") or "")[:240]
+        except Exception:
+            detail = (res.text or "")[:240]
+        reasons = {
+            403: "The Boomi API user does not have permission to rerun documents (it needs the 'Process Reporting / Execution' privilege).",
+            410: "Boomi no longer offers this endpoint.",
+            503: "Boomi is unavailable or the API rate limit was exceeded. Try again in a minute.",
+        }
+        text = reasons.get(res.status_code) or f"Boomi did not accept the rerun (HTTP {res.status_code})."
+        hint = ""
+        if res.status_code in (400, 404, 500):
+            hint = (" Boomi can only rerun documents that entered through a Start shape connector or a Trading Partner shape, "
+                    "so a process that starts with 'No Data' has nothing to rerun. The process must be deployed, and test-mode runs cannot be rerun.")
+        return f"{text} {('Boomi said: ' + detail + '.') if detail else ''}{hint} The execution was not changed.".replace("  ", " ")
+
     async def reprocess_document(
         self,
         execution_id: str,
@@ -456,32 +476,40 @@ class BoomiService:
         auth = self._get_boomi_auth()
         live = bool(auth and settings.BOOMI_ACCOUNT_ID)
         api_dispatched = False
+        request_id = None
 
         if live:
+            if patched_payload:
+                # Boomi's rerun replays the ORIGINAL documents; it cannot substitute new content
+                raise RuntimeError("Boomi can rerun the original failed documents but cannot replace their content. Nothing was changed.")
             account_id = settings.BOOMI_ACCOUNT_ID.strip()
             base_url = settings.BOOMI_BASE_URL.rstrip("/")
-            payload_body = {
-                "executionId": execution_id,
-                "documentId": execution.get("payload", {}).get("documentId", "DOC-001"),
+            # Platform API "RerunDocument": rerun the documents that failed in this execution.
+            body = {
+                "@type": "RerunDocument",
+                "originalExecutionId": execution_id,
+                "AllDocuments": {"@type": "AllDocuments", "documentStatus": "ERROR"},
             }
-            if patched_payload:
-                payload_body["patchContent"] = patched_payload
             try:
-                async with httpx.AsyncClient(timeout=10.0) as client:
+                async with httpx.AsyncClient(timeout=15.0) as client:
                     res = await client.post(
-                        f"{base_url}/{account_id}/ReprocessDocument",
+                        f"{base_url}/{account_id}/RerunDocument",
                         auth=auth,
                         headers={"Accept": "application/json", "Content-Type": "application/json"},
-                        json=payload_body,
+                        json=body,
                     )
             except Exception as ex:
-                logger.warning(f"Boomi reprocess call failed: {ex}")
-                raise RuntimeError(f"Could not reach Boomi to reprocess ({ex.__class__.__name__}). Nothing was changed.")
-            logger.info(f"Boomi AtomSphere ReprocessDocument response: {res.status_code}")
+                logger.warning(f"Boomi rerun call failed: {ex}")
+                raise RuntimeError(f"Could not reach Boomi to rerun the documents ({ex.__class__.__name__}). Nothing was changed.")
+            logger.info(f"Boomi RerunDocument response: {res.status_code}")
             if res.status_code not in (200, 201, 202):
                 # Never mark an execution healed unless Boomi accepted the request
-                raise RuntimeError(f"Boomi did not accept the reprocess request (HTTP {res.status_code}). The execution was not changed.")
+                raise RuntimeError(self._rerun_error(res))
             api_dispatched = True
+            try:
+                request_id = res.json().get("requestId")
+            except Exception:
+                pass
 
         execution["status"] = "SUCCESS"
         execution["reprocessed"] = True
@@ -506,7 +534,8 @@ class BoomiService:
         self._reprocessed_count += 1
         now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
         if api_dispatched:
-            message = f"Boomi accepted the reprocess request for {execution_id}. Check the execution in Boomi to confirm it completed."
+            message = (f"Boomi accepted the rerun of the failed documents for {execution_id}. "
+                       "A new execution appears in Process Reporting shortly; check it there to confirm the documents went through.")
         else:
             message = f"Demo mode (no Boomi credentials): simulated reprocess of {execution_id}."
         return {

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import type { ExecutionRecord, ExecutionStatus } from '../types/boomi';
 import { 
-  Bot, 
+  Sparkles,
   GitBranch, 
   RotateCw, 
   CheckCircle2, 
@@ -203,10 +203,10 @@ export const ExecutionTable: React.FC<ExecutionTableProps> = ({
                       {isError ? (
                         <button
                           onClick={() => onSelectExecution(exec)}
-                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gradient-to-r from-boomi-blue to-sky-500 hover:from-blue-600 hover:to-sky-400 text-white font-semibold text-xs shadow-md shadow-sky-950 transition cursor-pointer"
+                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-pink-500/20 hover:bg-pink-500/30 text-pink-200 font-semibold text-xs border border-pink-500/40 transition cursor-pointer"
                         >
-                          <Bot className="w-3.5 h-3.5" />
-                          <span>Triage with Keystone AI</span>
+                          <Sparkles className="w-3.5 h-3.5 text-pink-300" />
+                          <span>Triage error</span>
                         </button>
                       ) : (
                         <button

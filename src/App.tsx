@@ -7,7 +7,7 @@ import { ProcessFlowGraph } from './components/ProcessFlowGraph';
 import { LiveProcessFeed } from './components/LiveProcessFeed';
 import { ProcessReportingPage } from './components/ProcessReportingPage';
 import { RevisionHistoryPage } from './components/revisions/RevisionHistoryPage';
-import { TriageModal } from './components/TriageModal';
+import type { ActionOutcome } from './components/ChatTriageCard';
 import { BoomiCompanionDrawer } from './components/BoomiCompanionDrawer';
 import { FailureHistory } from './components/FailureHistory';
 import { InvestigationCard } from './components/InvestigationCard';
@@ -50,13 +50,11 @@ export function App() {
       return null;
     }
   });
-  const [selectedExecution, setSelectedExecution] = useState<ExecutionRecord | null>(null);
+  // A failed execution to open as a triage card inside the chat (no popup)
+  const [triageRequest, setTriageRequest] = useState<{ execution: ExecutionRecord; requestId: number } | null>(null);
   const [isCompanionOpen, setIsCompanionOpen] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   // A question to send to the Companion as soon as the drawer opens (e.g. "What changed?" on an incident)
-  // Re-run: nothing starts until the user confirms in the dialog
-  const [rerunTarget, setRerunTarget] = useState<ExecutionRecord | null>(null);
-  const [rerunBusy, setRerunBusy] = useState(false);
   const [companionPrompt, setCompanionPrompt] = useState<string | null>(null);
   // Revision picked via "AI Docs" in Revision History; the Companion summarizes it
   const [docRequest, setDocRequest] = useState<(ProcessDocRef & { requestId: number }) | null>(null);
@@ -231,6 +229,51 @@ export function App() {
   }, []);
 
   // Reprocess document via Boomi AtomSphere API
+  // Mark an execution as reprocessed after Boomi accepted the request
+  const applyHealed = (execId: string) => {
+    setExecutions((prev) =>
+      prev.map((item) =>
+        item.id === execId
+          ? { ...item, status: 'SUCCESS', reprocessed: true, errorMessage: undefined, outboundDocs: 1, durationMs: 1150 }
+          : item
+      )
+    );
+    setIsReprocessed(true);
+  };
+
+  // Open a failure as a card in the chat: the error, with Reprocess, Re-run and Find the cause
+  const openTriage = (exec: ExecutionRecord) => {
+    setSelectedProcessId(exec.processId);
+    setSelectedProcessName(exec.processName);
+    setTriageRequest({ execution: exec, requestId: Date.now() });
+    setIsCompanionOpen(true);
+  };
+
+  // The chat reports each result itself, so these return it instead of showing a toast
+  const handleReprocessInChat = async (execId: string): Promise<ActionOutcome> => {
+    try {
+      const res = await api.reprocessExecution(execId);
+      applyHealed(execId);
+      return { ok: true, message: res.message || 'Boomi accepted the rerun of the failed documents.' };
+    } catch (e) {
+      return { ok: false, message: e instanceof Error ? e.message : 'Reprocess failed.' };
+    }
+  };
+
+  const handleRerunInChat = async (exec: ExecutionRecord): Promise<ActionOutcome> => {
+    try {
+      const res = await api.rerunProcess(exec.processId, exec.atomName);
+      // Pull the new execution from Boomi once it has had time to run
+      setTimeout(async () => {
+        const fresh = await api.fetchExecutionsLive(true);
+        if (fresh) setExecutions(fresh);
+      }, 12000);
+      return { ok: true, message: res.message };
+    } catch (e) {
+      return { ok: false, message: e instanceof Error ? e.message : 'Could not start the process.' };
+    }
+  };
+
   const handleAutoHeal = async (execId: string) => {
     try {
       await api.reprocessExecution(execId);
@@ -240,46 +283,13 @@ export function App() {
       return;
     }
 
-    setExecutions((prev) =>
-      prev.map((item) => {
-        if (item.id === execId) {
-          return {
-            ...item,
-            status: 'SUCCESS',
-            reprocessed: true,
-            errorMessage: undefined,
-            outboundDocs: 1,
-            durationMs: 1150,
-          };
-        }
-        return item;
-      })
-    );
-
-    setIsReprocessed(true);
-    setSelectedExecution(null);
+    applyHealed(execId);
     confetti({
       particleCount: 100,
       spread: 70,
       origin: { y: 0.6 }
     });
     showToast('⚡ Boomi accepted the reprocess request. Confirm the result in Boomi.');
-  };
-
-  const handleConfirmRerun = async () => {
-    if (!rerunTarget) return;
-    setRerunBusy(true);
-    try {
-      const res = await api.rerunProcess(rerunTarget.processId, rerunTarget.atomName);
-      showToast(`▶️ ${res.message}`);
-      setRerunTarget(null);
-      // Pull the new execution from Boomi once it has had time to run
-      setTimeout(() => { handleResetDemo(); }, 12000);
-    } catch (e) {
-      showToast(`⚠️ ${e instanceof Error ? e.message : 'Could not start the process.'}`);
-    } finally {
-      setRerunBusy(false);
-    }
   };
 
   const handleResetDemo = async () => {
@@ -328,8 +338,7 @@ export function App() {
     setActiveModule('healing');
     setActiveTab('cockpit');
     setSelectedProcessId(exec.processId);
-    setSelectedProcessName(exec.processName);
-    setSelectedExecution(exec);
+    openTriage(exec);
   };
 
   const failedCount = executions.filter(e => e.status === 'ERROR' && !e.reprocessed).length;
@@ -461,15 +470,11 @@ export function App() {
 
                 <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto xl:shrink-0">
                   <button
-                    onClick={() => {
-                      setSelectedExecution(activeErrorExec);
-                      setSelectedProcessId(activeErrorExec.processId);
-                      setSelectedProcessName(activeErrorExec.processName);
-                    }}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-boomi-blue to-boomi-accent hover:from-blue-600 hover:to-sky-400 text-white font-bold text-xs shadow-lg shadow-sky-950 transition-all cursor-pointer"
+                    onClick={() => openTriage(activeErrorExec)}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-pink-500/20 hover:bg-pink-500/30 text-pink-200 font-bold text-xs border border-pink-500/40 transition-all cursor-pointer"
                   >
-                    <Sparkles className="w-4 h-4 text-amber-200" />
-                    <span>Triage with Keystone AI</span>
+                    <Sparkles className="w-4 h-4 text-pink-300" />
+                    <span>Triage error</span>
                   </button>
                   <button
                     onClick={() => {
@@ -480,14 +485,6 @@ export function App() {
                     className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 transition-all cursor-pointer"
                   >
                     <span>What changed?</span>
-                  </button>
-                  <button
-                    onClick={() => setRerunTarget(activeErrorExec)}
-                    title="Run this process once on its Atom (asks for confirmation)"
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 transition-all cursor-pointer"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    <span>Re-run process</span>
                   </button>
                 </div>
               </div>
@@ -561,7 +558,7 @@ export function App() {
 
               <ProcessFlowGraph
                 onTriageClick={() => {
-                  if (activeErrorExec) setSelectedExecution(activeErrorExec);
+                  if (activeErrorExec) openTriage(activeErrorExec);
                 }}
                 isReprocessed={isReprocessed}
                 onSimulateHeal={() => {
@@ -576,11 +573,7 @@ export function App() {
             {/* Section 3: Live Process Reporting (Distinct Active Processes) */}
             <LiveProcessFeed
               executions={executions}
-              onSelectExecution={(exec) => {
-                setSelectedExecution(exec);
-                setSelectedProcessId(exec.processId);
-                setSelectedProcessName(exec.processName);
-              }}
+              onSelectExecution={(exec) => openTriage(exec)}
               onOpenFlow={(exec) => {
                 setSelectedProcessId(exec.processId);
                 setSelectedProcessName(exec.processName);
@@ -594,11 +587,7 @@ export function App() {
           /* Separate Page: Full Process Reporting with All Executions */
           <ProcessReportingPage
             executions={executions}
-            onSelectExecution={(exec) => {
-              setSelectedExecution(exec);
-              setSelectedProcessId(exec.processId);
-              setSelectedProcessName(exec.processName);
-            }}
+            onSelectExecution={(exec) => openTriage(exec)}
             onOpenFlow={(exec) => {
               setSelectedProcessId(exec.processId);
               setSelectedProcessName(exec.processName);
@@ -623,51 +612,6 @@ export function App() {
       </div>
       </div>
 
-      {/* Re-run confirmation: this really executes the process */}
-      {rerunTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4" role="dialog" aria-modal="true" aria-label="Confirm re-run">
-          <div className="w-full max-w-md rounded-2xl bg-boomi-card border border-amber-500/40 shadow-2xl p-5 space-y-3">
-            <div className="flex items-center gap-2 text-amber-300 font-bold text-sm">
-              <AlertTriangle className="w-4 h-4" />
-              <span>Run this process now?</span>
-            </div>
-            <p className="text-xs text-slate-300">
-              This starts <strong className="text-white">{rerunTarget.processName}</strong> on <strong className="text-white">{rerunTarget.atomName}</strong> right now.
-              It runs the real integration, so it can call external systems, send or change data, and generate load.
-            </p>
-            {/chaos|load|fuzz/i.test(rerunTarget.processName) && (
-              <p className="text-xs text-amber-200/90">
-                The name suggests a load or chaos test. Running it again will generate traffic and may trigger the same failures.
-              </p>
-            )}
-            <p className="text-[11px] text-slate-500">Boomi must have the process deployed. The same process can only be started once a minute from here.</p>
-            <div className="flex justify-end gap-2 pt-1">
-              <button
-                onClick={() => setRerunTarget(null)}
-                disabled={rerunBusy}
-                className="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 text-xs cursor-pointer disabled:opacity-60"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmRerun}
-                disabled={rerunBusy}
-                className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold cursor-pointer disabled:opacity-60"
-              >
-                {rerunBusy ? 'Starting…' : 'Run process'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Incident Triage Modal */}
-      <TriageModal
-        execution={selectedExecution}
-        onClose={() => setSelectedExecution(null)}
-        onAutoHeal={handleAutoHeal}
-      />
-
       {/* Boomi Companion Conversational Drawer */}
       <BoomiCompanionDrawer
         isOpen={isCompanionOpen}
@@ -677,9 +621,13 @@ export function App() {
         onPromptConsumed={() => setCompanionPrompt(null)}
         executions={executions}
         docRequest={docRequest}
+        triageRequest={triageRequest}
+        onReprocess={handleReprocessInChat}
+        onRerun={handleRerunInChat}
         onTriggerAutoHeal={handleAutoHeal}
         onOpenFlow={(exec) => {
-          setSelectedExecution(exec);
+          setActiveModule('healing');
+          setActiveTab('cockpit');
           setSelectedProcessId(exec.processId);
           setSelectedProcessName(exec.processName);
           setIsCompanionOpen(false);
