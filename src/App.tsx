@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Navbar } from './components/Navbar';
 import { Sidebar, type AppModule, type HealingTab, type CompilerView } from './components/Sidebar';
 import { CompilerRecordsPage, type BlueprintRecord } from './components/CompilerRecordsPage';
@@ -16,11 +16,8 @@ import { VisualArchitectureCompiler } from './components/VisualArchitectureCompi
 import { api } from './services/api';
 import type { ExecutionRecord, AtomHealth, ProcessDocRef } from './types/boomi';
 import { 
-  Sparkles, 
-  RotateCcw, 
   Layers, 
   CheckCircle2, 
-  AlertTriangle,
   HeartPulse,
   ListFilter
 } from 'lucide-react';
@@ -66,6 +63,13 @@ export function App() {
   // Real process selection for Flow Chart
   const [selectedProcessId, setSelectedProcessId] = useState<string>('94348d68-6d4e-4679-90be-a35219a02116');
   const [selectedProcessName, setSelectedProcessName] = useState<string>('Modbus_Read_Test_Process');
+  const topologySectionRef = useRef<HTMLDivElement>(null);
+
+  const openTopology = (exec: ExecutionRecord) => {
+    setSelectedProcessId(exec.processId);
+    setSelectedProcessName(exec.processName);
+    window.setTimeout(() => topologySectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  };
 
   const refreshRecords = async (): Promise<BlueprintRecord[] | null> => {
     const list = (await api.listBlueprints()) as BlueprintRecord[] | null;
@@ -448,70 +452,6 @@ export function App() {
               }
             />
 
-            {/* Banner Alert for real active error from Boomi platform */}
-            {activeErrorExec ? (
-              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-rose-950/60 via-slate-900/90 to-boomi-dark border border-rose-500/40 p-4 sm:p-5 shadow-xl flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4">
-                <div className="flex items-start sm:items-center gap-3.5 min-w-0 w-full xl:w-auto xl:flex-1">
-                  <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/30 text-rose-400 shrink-0">
-                    <AlertTriangle className="w-5 h-5 animate-pulse" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-sm font-bold text-white break-words min-w-0">Active Integration Incident: {activeErrorExec.processName}</h2>
-                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30">
-                        P1 Critical
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-300 mt-1 max-w-2xl font-mono line-clamp-2 sm:truncate break-all sm:break-normal">
-                      {activeErrorExec.errorMessage || "Process execution reported errors in Dell Boomi AtomSphere."}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto xl:shrink-0">
-                  <button
-                    onClick={() => openTriage(activeErrorExec)}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-pink-500/20 hover:bg-pink-500/30 text-pink-200 font-bold text-xs border border-pink-500/40 transition-all cursor-pointer"
-                  >
-                    <Sparkles className="w-4 h-4 text-pink-300" />
-                    <span>Triage error</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setCompanionPrompt(`What changed in ${activeErrorExec.processName} recently, and who changed it?`);
-                      setIsCompanionOpen(true);
-                    }}
-                    title="Ask Keystone AI to compare the latest revisions of this process"
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 transition-all cursor-pointer"
-                  >
-                    <span>What changed?</span>
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-2xl bg-gradient-to-r from-emerald-950/50 via-slate-900/80 to-boomi-dark border border-emerald-500/40 p-4 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="p-2.5 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-400">
-                    <CheckCircle2 className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-bold text-white">All Production Pipelines Fully Operational</h2>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      Runtime Atom: <strong className="text-slate-200">{atoms[0]?.name || "ESI-PC16.easystepin.com"}</strong> is ONLINE with 0 active execution errors.
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  onClick={handleResetDemo}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition cursor-pointer"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Refresh Boomi Feed</span>
-                </button>
-              </div>
-            )}
-
             {/* Section 1: KPI Stats Overview */}
             <StatsOverview
               totalExecutions={executions.length}
@@ -536,14 +476,13 @@ export function App() {
             <FailureHistory
               executions={executions}
               onSelectProcess={(exec) => {
-                setSelectedProcessId(exec.processId);
-                setSelectedProcessName(exec.processName);
+                openTopology(exec);
                 showToast(`Loaded live Boomi canvas for: ${exec.processName}`);
               }}
             />
 
             {/* Section 2: Real Interactive Process Topology (Takes directly from Boomi XML) */}
-            <div className="space-y-2">
+            <div ref={topologySectionRef} className="space-y-2 scroll-mt-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Layers className="w-4 h-4 text-boomi-accent" />
@@ -567,6 +506,7 @@ export function App() {
                 onReset={handleResetDemo}
                 processId={selectedProcessId}
                 processName={selectedProcessName}
+                processError={executions.find((e) => e.processId === selectedProcessId && e.status === 'ERROR' && !e.reprocessed)?.errorMessage}
               />
             </div>
 
@@ -575,8 +515,7 @@ export function App() {
               executions={executions}
               onSelectExecution={(exec) => openTriage(exec)}
               onOpenFlow={(exec) => {
-                setSelectedProcessId(exec.processId);
-                setSelectedProcessName(exec.processName);
+                openTopology(exec);
                 showToast(`Loaded live Boomi canvas for: ${exec.processName}`);
               }}
               onViewAllExecutions={() => setActiveTab('reporting')}
@@ -589,8 +528,7 @@ export function App() {
             executions={executions}
             onSelectExecution={(exec) => openTriage(exec)}
             onOpenFlow={(exec) => {
-              setSelectedProcessId(exec.processId);
-              setSelectedProcessName(exec.processName);
+              openTopology(exec);
               setActiveTab('cockpit');
               showToast(`Loaded live Boomi canvas for: ${exec.processName}`);
             }}

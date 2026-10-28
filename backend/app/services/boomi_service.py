@@ -352,7 +352,8 @@ class BoomiService:
                         nodes = []
                         edges = []
                         
-                        # Find if there is an execution error for this process
+                        # Boomi's execution summary does not identify a failed shape in many accounts.
+                        # Only attach an error to a shape when the execution record names that shape.
                         exec_record = next((e for e in self._executions if e.get("processId") == process_id and e.get("status") == "ERROR"), None)
                         
                         for idx, s in enumerate(shapes):
@@ -369,8 +370,8 @@ class BoomiService:
                             is_error = False
                             error_msg = None
                             
-                            # If this process has an execution error and this is connectoraction/map, mark it
-                            if exec_record and (stype in ["connectoraction", "connector", "map"] or idx == 1):
+                            error_shape_name = exec_record.get("errorShapeName") if exec_record else None
+                            if exec_record and error_shape_name and error_shape_name.lower() in {s_id.lower(), label.lower()}:
                                 status = "error"
                                 is_error = True
                                 error_msg = exec_record.get("errorMessage", "Error during shape execution")
@@ -404,7 +405,7 @@ class BoomiService:
                                     "system": system_name,
                                     "docsIn": 1,
                                     "docsOut": 0 if is_error else 1,
-                                    "details": f"Component ID: {s_id}",
+                                    "details": f"{stype.capitalize()} step in {p_name}",
                                     "errorMessage": error_msg,
                                     "isErrorPoint": is_error,
                                 }

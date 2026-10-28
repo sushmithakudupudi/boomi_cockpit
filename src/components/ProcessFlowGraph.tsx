@@ -12,7 +12,7 @@ import type { Node, Edge } from '@xyflow/react';
 import { CustomBoomiNode } from './CustomBoomiNode';
 import type { BoomiNodeData } from '../types/boomi';
 import { api } from '../services/api';
-import { Sparkles, RotateCcw, AlertTriangle, CheckCircle, Zap, Loader2 } from 'lucide-react';
+import { Sparkles, RotateCcw, AlertTriangle, CheckCircle, Zap, Loader2, X } from 'lucide-react';
 
 const nodeTypes = {
   boomiShape: CustomBoomiNode,
@@ -25,6 +25,7 @@ interface ProcessFlowGraphProps {
   onReset: () => void;
   processId?: string;
   processName?: string;
+  processError?: string;
 }
 
 export const ProcessFlowGraph: React.FC<ProcessFlowGraphProps> = ({
@@ -34,11 +35,13 @@ export const ProcessFlowGraph: React.FC<ProcessFlowGraphProps> = ({
   onReset,
   processId,
   processName,
+  processError,
 }) => {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<BoomiNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [activeProcessName, setActiveProcessName] = React.useState<string>(processName || 'Modbus_Read_Test_Process');
   const [isLoading, setIsLoading] = React.useState<boolean>(false);
+  const [selectedNode, setSelectedNode] = React.useState<Node<BoomiNodeData> | null>(null);
 
   // Load real Boomi topology from API whenever processId or processName changes
   React.useEffect(() => {
@@ -66,6 +69,8 @@ export const ProcessFlowGraph: React.FC<ProcessFlowGraphProps> = ({
       isMounted = false;
     };
   }, [processId, processName, setNodes, setEdges]);
+
+  React.useEffect(() => setSelectedNode(null), [processId]);
 
   // Update nodes visually when reprocess state changes
   React.useEffect(() => {
@@ -121,9 +126,9 @@ export const ProcessFlowGraph: React.FC<ProcessFlowGraphProps> = ({
             <span className="flex items-center gap-1.5 text-xs text-sky-400 font-medium">
               <Loader2 className="w-3.5 h-3.5 animate-spin" /> Fetching Boomi shapes...
             </span>
-          ) : hasErrorShape ? (
+          ) : processError || hasErrorShape ? (
             <span className="flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full bg-rose-500/15 text-rose-400 border border-rose-500/30 font-medium">
-              <AlertTriangle className="w-3.5 h-3.5" /> Shape Execution Error
+              <AlertTriangle className="w-3.5 h-3.5" /> {hasErrorShape ? 'Shape Execution Error' : 'Process Execution Error'}
             </span>
           ) : (
             <span className="flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-medium">
@@ -170,6 +175,7 @@ export const ProcessFlowGraph: React.FC<ProcessFlowGraphProps> = ({
           edges={edges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
+          onNodeClick={(_, node) => setSelectedNode(node as Node<BoomiNodeData>)}
           nodeTypes={nodeTypes}
           fitView
           fitViewOptions={{ padding: 0.3 }}
@@ -197,6 +203,33 @@ export const ProcessFlowGraph: React.FC<ProcessFlowGraphProps> = ({
             className="!bg-slate-900/90 !border-slate-800 !rounded-xl !shadow-xl overflow-hidden"
           />
         </ReactFlow>
+        {selectedNode && (
+          <aside className="absolute left-4 top-4 z-20 w-[min(360px,calc(100%-2rem))] rounded-xl border border-slate-700 bg-slate-900/95 p-4 shadow-2xl backdrop-blur" aria-label={`${selectedNode.data.title} step details`}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] uppercase tracking-wider text-sky-300">Selected shape</p>
+                <h3 className="mt-1 text-sm font-bold text-white">{selectedNode.data.title}</h3>
+                <p className="text-xs text-slate-400">{selectedNode.data.subtitle}</p>
+              </div>
+              <button onClick={() => setSelectedNode(null)} aria-label="Close step details" className="rounded-md p-1 text-slate-400 hover:bg-slate-800 hover:text-white cursor-pointer"><X className="h-4 w-4" /></button>
+            </div>
+            <dl className="mt-3 space-y-2 text-xs">
+              <div className="flex justify-between gap-3"><dt className="shrink-0 text-slate-500">Component ID</dt><dd className="break-all text-right font-mono text-slate-200">{processId || 'Unavailable'}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="shrink-0 text-slate-500">Shape ID</dt><dd className="break-all text-right font-mono text-slate-200">{selectedNode.id}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-slate-500">System</dt><dd className="text-right text-slate-200">{selectedNode.data.system || 'Boomi'}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-slate-500">Step status</dt><dd className="text-right text-slate-200 capitalize">{selectedNode.data.status}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-slate-500">Documents</dt><dd className="text-right text-slate-200">In {selectedNode.data.docsIn} · Out {selectedNode.data.docsOut}</dd></div>
+              {selectedNode.data.details && <div><dt className="text-slate-500">Step details</dt><dd className="mt-0.5 break-words text-slate-200">{selectedNode.data.details}</dd></div>}
+              {selectedNode.data.errorMessage ? (
+                <div className="rounded-lg border border-rose-500/30 bg-rose-950/40 p-2"><dt className="font-semibold text-rose-300">Step error</dt><dd className="mt-1 break-words text-rose-100">{selectedNode.data.errorMessage}</dd></div>
+              ) : processError ? (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-950/30 p-2"><dt className="font-semibold text-amber-200">Process error</dt><dd className="mt-1 break-words text-amber-100">{processError}</dd><p className="mt-1 text-[10px] text-amber-200/70">Boomi did not identify this step as the source of the process error.</p></div>
+              ) : (
+                <p className="text-slate-500">No error is reported for this step.</p>
+              )}
+            </dl>
+          </aside>
+        )}
       </div>
 
       {/* Canvas Bottom Legend */}

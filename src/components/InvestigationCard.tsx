@@ -338,10 +338,10 @@ export const InvestigationCard: React.FC<Props> = ({ execution, onAskFollowUp })
 
           <div className="flex flex-wrap items-center gap-3 pt-1">
             <button
-              onClick={() => onAskFollowUp(`About your diagnosis of ${execution.processName}: "${d.likelyCause}" Walk me through how you reached that and what I should check first.`)}
+              onClick={() => onAskFollowUp(`Summarize the investigation for ${execution.processName}. In plain language, cover the failure, the likely cause, the evidence gathered (including the investigation steps), how certain the conclusion is, and the recommended next checks. Clearly separate confirmed facts from hypotheses.`)}
               className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-semibold cursor-pointer"
             >
-              Ask a follow-up
+              Summarize investigation
             </button>
             {inv.steps && inv.steps.length > 0 && (
               <button onClick={() => setShowSteps((v) => !v)} className="flex items-center gap-1 text-slate-400 hover:text-white cursor-pointer">

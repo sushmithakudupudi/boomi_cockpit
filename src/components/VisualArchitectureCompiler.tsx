@@ -194,10 +194,9 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
   const [buildError, setBuildError] = useState<string | null>(null);
   const [buildBusy, setBuildBusy] = useState<boolean>(false);
 
-  // Real-time AI generated prompt state from OpenAI
+  // Generated Companion spec and its source, for display/export behavior only.
   const [aiGeneratedPrompt, setAiGeneratedPrompt] = useState<string | null>(null);
   const [promptSource, setPromptSource] = useState<'openai' | 'domain_engine'>('domain_engine');
-  const [aiModelUsed, setAiModelUsed] = useState<string>('gpt-4o-mini');
 
   // Re-index stages (STEP 01, 02, ...) and derive each category from position and shape kind.
   // The flow always opens with a Start shape and closes with Stop / Return Documents (or a Process Call whose
@@ -348,7 +347,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
   const jobBreakdown = useMemo(() => generateJobBreakdown(currentConfig), [currentConfig]);
   const specGenerated = aiGeneratedPrompt !== null;
 
-  // Compile with OpenAI via backend
+  // Generate the Companion spec through the backend, with a local fallback.
   const reviewRef = useRef<HTMLElement>(null);
   const handleGenerateCompanionSpec = async () => {
     setIsCompiling(true);
@@ -365,7 +364,6 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
       if (res && res.prompt) {
         setAiGeneratedPrompt(res.prompt);
         setPromptSource(res.source as 'openai' | 'domain_engine');
-        setAiModelUsed(res.modelUsed || 'gpt-4o-mini');
         succeeded = true;
         if (onShowToast) onShowToast('Companion spec ready. Review it below.');
       } else {
@@ -572,7 +570,6 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
         {
           schemaVersion: '1.0',
           generator: 'BoomiOps ArchForge',
-          aiModel: promptSource === 'openai' ? aiModelUsed : 'Domain Rules Engine',
           source: promptSource,
           blueprintId: currentConfig.blueprintId,
           title: currentConfig.title,
@@ -707,16 +704,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
             <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
             <span>Companion spec generated. Review it before handing off to Companion.</span>
           </div>
-          {promptSource === 'openai' ? (
-            <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-              OPENAI ({aiModelUsed})
-            </span>
-          ) : (
-            <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-sky-500/20 text-sky-300 border border-sky-500/30">
-              RULES ENGINE SPEC
-            </span>
-          )}
+          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">SPEC READY</span>
         </div>
       )}
 
@@ -1141,7 +1129,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
                     {promptSource === 'openai' ? (
                       <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold flex items-center gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                        OpenAI {aiModelUsed}
+                        AI GENERATED
                       </span>
                     ) : (
                       <span className="px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30 text-[10px] font-semibold">
@@ -1329,7 +1317,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
         <span className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-emerald-400" />
           <span>
-            {specGenerated && promptSource === 'openai' ? `OpenAI (${aiModelUsed})` : 'Local rules engine'} • No platform changes made
+            {specGenerated ? 'Companion spec generated' : 'Live spec preview'} • No platform changes made
           </span>
         </span>
       </div>

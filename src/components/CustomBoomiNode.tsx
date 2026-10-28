@@ -32,7 +32,8 @@ export const CustomBoomiNode: FC<NodeProps<Node<BoomiNodeData>>> = ({ data }) =>
 
   return (
     <div 
-      className={`min-w-[240px] max-w-[280px] rounded-xl p-3 shadow-lg border transition-all duration-300 ${
+      title="Click to inspect this process step"
+      className={`min-w-[240px] max-w-[280px] rounded-xl p-3 shadow-lg border transition-all duration-300 cursor-pointer hover:ring-2 hover:ring-sky-400/40 ${
         isError 
           ? 'bg-rose-950/40 border-rose-500/80 shadow-rose-950/60 ring-2 ring-rose-500/50 animate-pulse'
           : isSuccess
