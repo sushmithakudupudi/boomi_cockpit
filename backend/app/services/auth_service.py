@@ -212,6 +212,24 @@ def logout(db: Session, token: Optional[str]) -> None:
         db.commit()
 
 
+# --------------------------------------------------------------------------- password reset
+
+def reset_password(db: Session, email: str, new_password: str) -> None:
+    email = normalise_email(email)
+    user = db.scalar(select(User).where(User.email == email))
+    if user is None or not user.is_active:
+        raise AuthError(404, "account_not_found", "No active account found for that email.")
+    validate_new_credentials(email, new_password)
+    now = utcnow()
+    user.password_hash = hash_password(new_password)
+    user.failed_login_count = 0
+    user.locked_until = None
+    # Sign out everywhere: revoke all of this user's live sessions.
+    for s in db.scalars(select(UserSession).where(UserSession.user_id == user.id, UserSession.revoked_at.is_(None))):
+        s.revoked_at = now
+    db.commit()
+
+
 def public_user(user: User) -> dict:
     return {
         "id": user.id,

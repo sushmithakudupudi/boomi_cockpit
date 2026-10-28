@@ -161,7 +161,12 @@ class BlueprintStage(BaseModel):
     subLabel: Optional[str] = None
     badgeText: Optional[str] = None
     notes: Optional[str] = None
+    branches: Optional[int] = None  # Branch shape only: number of paths, 2-25
+    branchPaths: Optional[List[List["BlueprintStage"]]] = None  # Branch only: shapes on paths 2..N
+    subprocessSteps: Optional[List["BlueprintStage"]] = None  # Process Call only: steps inside its sub-process
     details: Optional[Dict[str, Any]] = None
+
+BlueprintStage.model_rebuild()
 
 class GenerateBlueprintPromptRequest(BaseModel):
     blueprintId: str
@@ -174,8 +179,18 @@ class BuildBlueprintRequest(BaseModel):
     processName: str
     stages: List[BlueprintStage]
     description: Optional[str] = "Built from the BoomiOps Visual Architecture Compiler"
-    folderId: Optional[str] = "Rjo4ODQyMTg1"
+    folderId: Optional[str] = None  # a folder under BOOMI_ROOT_FOLDER_ID; the root folder when omitted
     dryRun: bool = False
+
+class BoomiFolder(BaseModel):
+    id: str
+    name: str
+    fullPath: str
+    parentId: str = ""
+
+class CreateFolderRequest(BaseModel):
+    name: str
+    parentId: str
 
 class PlannedShape(BaseModel):
     label: str
@@ -204,6 +219,7 @@ class SavedBlueprint(BaseModel):
     businessRule: str = ""
     settings: Dict[str, Any] = {}
     processName: str = ""
+    folderId: Optional[str] = None  # Boomi folder chosen for Build in Boomi
     status: str = "draft"  # 'draft' until it is sent to Boomi, then 'sent'
     sentAt: Optional[str] = None
     buildResult: Optional[Dict[str, Any]] = None

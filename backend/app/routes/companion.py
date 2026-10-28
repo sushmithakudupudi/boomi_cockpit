@@ -8,6 +8,8 @@ from ..models.schemas import (
     BuildBlueprintRequest,
     BuildBlueprintResponse,
     SavedBlueprint,
+    BoomiFolder,
+    CreateFolderRequest,
     GenerateBlueprintPromptRequest,
     GenerateBlueprintPromptResponse,
 )
@@ -15,6 +17,7 @@ from ..services.companion_ai import companion_ai_service
 from ..services.boomi_service import boomi_service
 from . import auth as auth_routes
 from .actions import APPROVER_ROLES
+from ..config import settings
 
 router = APIRouter(prefix="/companion", tags=["Boomi Companion AI"])
 
@@ -66,16 +69,53 @@ async def build_blueprint_process(req: BuildBlueprintRequest, user=Depends(auth_
     # Previewing is open to everyone signed in; creating components in Boomi needs an administrator or operator
     if user.role.name not in APPROVER_ROLES:
         raise HTTPException(status_code=403, detail="Only administrators and operators can create processes in Boomi.")
+    folder_id = req.folderId or settings.BOOMI_ROOT_FOLDER_ID
+    if folder_id != settings.BOOMI_ROOT_FOLDER_ID:
+        await _require_folder(folder_id)
     try:
         result = await boomi_service.create_process_from_blueprint(
             name=req.processName,
             description=req.description or "",
-            folder_id=req.folderId or "Rjo4ODQyMTg1",
+            folder_id=folder_id,
             plan=plan,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     return BuildBlueprintResponse(dryRun=False, shapes=shapes, **result)
+
+async def _require_folder(folder_id: str) -> None:
+    """The folder must exist (and not be deleted) in the Boomi account."""
+    try:
+        folders = await boomi_service.list_folders()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    if folder_id not in {f["id"] for f in folders}:
+        raise HTTPException(status_code=400, detail="That folder no longer exists in Boomi. Pick another one.")
+
+
+@router.get("/boomi-folders", response_model=list[BoomiFolder])
+async def list_boomi_folders(user=Depends(auth_routes.current_user)):
+    """Every folder in the Boomi account, for picking where Build in Boomi creates the process."""
+    try:
+        return await boomi_service.list_folders()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.post("/boomi-folders", response_model=BoomiFolder, status_code=201)
+async def create_boomi_folder(req: CreateFolderRequest, user=Depends(auth_routes.current_user)):
+    """Creates a folder in Boomi inside an existing folder."""
+    if user.role.name not in APPROVER_ROLES:
+        raise HTTPException(status_code=403, detail="Only administrators and operators can create folders in Boomi.")
+    name = req.name.strip()
+    if not name or len(name) > 80 or "/" in name:
+        raise HTTPException(status_code=422, detail="Enter a folder name of up to 80 characters, without '/'.")
+    await _require_folder(req.parentId)
+    try:
+        return await boomi_service.create_folder(name, req.parentId)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
 
 @router.get("/blueprints", response_model=list[SavedBlueprint])
 async def list_blueprints():

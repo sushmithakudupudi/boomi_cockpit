@@ -45,6 +45,8 @@ export const authApi = {
     authRequest<AuthUser>('/login', { method: 'POST', body: JSON.stringify({ email, password, remember }) }),
   setup: (email: string, password: string, fullName: string) =>
     authRequest<AuthUser>('/setup', { method: 'POST', body: JSON.stringify({ email, password, fullName }) }),
+  resetPassword: (email: string, password: string) =>
+    authRequest<void>('/reset-password', { method: 'POST', body: JSON.stringify({ email, password }) }),
   logout: () => authRequest<void>('/logout', { method: 'POST' }),
 };
 

@@ -143,7 +143,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <>
-    {mobileOpen && <div className="md:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" onClick={onCloseMobile} aria-hidden="true" />}
+    {mobileOpen && <div className="md:hidden fixed inset-0 z-[46] bg-black/60 backdrop-blur-sm" onClick={onCloseMobile} aria-hidden="true" />}
     <aside
       className={`fixed md:sticky inset-y-0 left-0 md:top-0 z-50 md:z-auto h-screen shrink-0 flex flex-col bg-boomi-dark border-r border-boomi-cardBorder md:border-r-0 transition-[width,transform] duration-200 w-64 ${
         collapsedPref ? 'md:w-[72px]' : 'md:w-64'

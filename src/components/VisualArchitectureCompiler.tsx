@@ -3,6 +3,8 @@ import {
   Copy,
   Check,
   RotateCcw,
+  FolderOpen,
+  FolderPlus,
   Plus,
   Trash2,
   ShieldCheck,
@@ -16,7 +18,6 @@ import {
   Info,
   Bot
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import type { Stage, BlueprintConfig } from '../types/compiler';
 import {
   PRESET_BLUEPRINTS,
@@ -24,15 +25,138 @@ import {
   generateJobBreakdown,
   generateBoomiCompanionPrompt
 } from '../services/boomiPromptEngine';
-import { api } from '../services/api';
+import { api, type BoomiFolder } from '../services/api';
 import { PageHeader } from './PageHeader';
 import { Select, type SelectOption } from './ui/Select';
-import { CATALOG_GROUPS, categorize, kindOf } from '../services/shapeCatalog';
+import { CATALOG_GROUPS, categorize, entryOf, kindOf } from '../services/shapeCatalog';
 
-// Shape catalog as grouped dropdown options (built once).
-const SHAPE_OPTIONS: SelectOption[] = CATALOG_GROUPS.flatMap((g) =>
-  g.entries.map((e) => ({ value: e.id, label: e.label, hint: e.tag, group: g.group })),
-);
+// Shape catalog as grouped dropdown options (built once), limited by position on the canvas:
+// the first card only offers Start shapes and listeners, the last card only End shapes,
+// and the cards in between offer process shapes and connectors.
+const optionsFor = (groups: string[]): SelectOption[] => CATALOG_GROUPS
+  .filter((g) => groups.includes(g.group))
+  .flatMap((g) => g.entries.map((e) => ({ value: e.id, label: e.label, hint: e.tag, group: g.group })));
+const FIRST_OPTIONS = optionsFor(['Start']);
+const MIDDLE_OPTIONS = optionsFor(['Shapes', 'Connectors']);
+const LAST_OPTIONS = optionsFor(['End']);
+const ALL_OPTIONS = optionsFor(CATALOG_GROUPS.map((g) => g.group));
+// Shapes on a branch path: process shapes, connectors and an optional end; no nested branches
+const PATH_OPTIONS = optionsFor(['Shapes', 'Connectors', 'End']).filter((o) => o.value !== 'Branch');
+// Steps inside a Process Call's sub-process: no nested calls or branches. It ends at Return Documents
+// unless the user ends it with Stop or Return Documents themselves.
+const SUBPROCESS_OPTIONS = optionsFor(['Shapes', 'Connectors', 'End']).filter((o) => o.value !== 'Branch' && o.value !== 'Process Call');
+
+/** Options for a card; a shape that no longer fits its position (e.g. after a move) stays listed so it still shows. */
+const shapeOptionsFor = (isFirst: boolean, isLast: boolean, current: string): SelectOption[] => {
+  const base = isFirst ? FIRST_OPTIONS : isLast ? LAST_OPTIONS : MIDDLE_OPTIONS;
+  if (base.some((o) => o.value === current)) return base;
+  const extra = ALL_OPTIONS.find((o) => o.value === current);
+  return extra ? [{ ...extra, group: 'Current (move or change it)' }, ...base] : base;
+};
+
+// Boomi's Branch step takes 2 to 25 paths
+const MIN_BRANCHES = 2;
+const MAX_BRANCHES = 25;
+const branchCount = (stage: Stage) => stage.branches ?? MIN_BRANCHES;
+/** Shapes on branch path `b` (2..N) of a Branch stage. */
+const pathOf = (stage: Stage, b: number): Stage[] => stage.branchPaths?.[b - 2] ?? [];
+/** Last step of a sub-process when it ends the sub-process without returning documents (Stop, Exception, ...). */
+const subprocessEnd = (stage?: Stage): Stage | undefined => {
+  const last = stage?.subprocessSteps?.[stage.subprocessSteps.length - 1];
+  return last && kindOf(last.selectedShapeOrConnector) === 'end' && last.selectedShapeOrConnector !== 'Return Documents' ? last : undefined;
+};
+/** A Process Call whose sub-process returns nothing can close the flow on its own. */
+const endsInSubprocess = (stage?: Stage) => stage?.selectedShapeOrConnector === 'Process Call' && !!subprocessEnd(stage);
+
+/** A row of small step cards (a branch path or a sub-process): add, rename, retype and remove steps. */
+const StepRow: React.FC<{
+  title: string;
+  steps: Stage[];
+  options: SelectOption[];
+  /** Shown before the first step, e.g. the sub-process's start. */
+  lead?: string;
+  /** What the row ends with in Boomi when the last step is not an end shape. */
+  tail: string;
+  onChange: (steps: Stage[]) => void;
+}> = ({ title, steps, options, lead, tail, onChange }) => {
+  const update = (k: number, patch: Partial<Stage>) => onChange(steps.map((s, i) => (i === k ? { ...s, ...patch } : s)));
+  // Picking a shape renames it, unless the user typed their own name
+  const retype = (k: number, shapeId: string) => {
+    const step = steps[k];
+    const prev = entryOf(step.selectedShapeOrConnector);
+    const next = entryOf(shapeId);
+    const label = step.label.trim();
+    const keepLabel = label && label !== prev?.label && label !== step.selectedShapeOrConnector;
+    update(k, { selectedShapeOrConnector: shapeId, label: keepLabel || !next ? step.label : next.label, subLabel: next?.tag });
+  };
+  const add = () => {
+    const entry = entryOf('Message');
+    onChange([...steps, {
+      id: `stage-${Date.now()}`,
+      stepNumber: '',
+      category: 'MIDDLEWARE / SKILL',
+      label: entry?.label ?? 'Message',
+      selectedShapeOrConnector: 'Message',
+      subLabel: entry?.tag,
+    }]);
+  };
+  const ended = steps.length > 0 && kindOf(steps[steps.length - 1].selectedShapeOrConnector) === 'end';
+
+  return (
+    <div className="flex items-start gap-2 overflow-x-auto pb-1">
+      <span className="shrink-0 mt-2 w-14 text-[11px] font-bold text-sky-300">{title}</span>
+      {lead && <span className="shrink-0 mt-2 text-[11px] text-slate-500">{lead}</span>}
+      {steps.map((step, k) => (
+        <div key={step.id} className="shrink-0 w-52 rounded-lg bg-slate-900/90 border border-slate-700/80 p-2 space-y-1.5">
+          <div className="flex items-center gap-1">
+            <input
+              type="text"
+              value={step.label}
+              onChange={(e) => update(k, { label: e.target.value })}
+              aria-label={`${title} step ${k + 1} name`}
+              maxLength={60}
+              className="min-w-0 flex-1 bg-transparent border-b border-slate-700 focus:border-sky-500 text-xs font-bold text-white focus:outline-none py-0.5"
+            />
+            <button
+              onClick={() => onChange(steps.filter((_, i) => i !== k))}
+              title="Remove step"
+              aria-label={`Remove ${title} step ${k + 1}`}
+              className="shrink-0 p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-slate-800 cursor-pointer"
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+          </div>
+          <Select
+            ariaLabel={`${title} step ${k + 1} type`}
+            value={step.selectedShapeOrConnector}
+            onChange={(v) => retype(k, v)}
+            options={options}
+            searchable
+            size="sm"
+          />
+          <input
+            type="text"
+            value={step.notes || ''}
+            onChange={(e) => update(k, { notes: e.target.value })}
+            aria-label={`${title} step ${k + 1} notes`}
+            placeholder="What it does"
+            maxLength={200}
+            className="w-full bg-slate-950/60 border border-slate-800 focus:border-sky-500 rounded-md px-2 py-1 text-[11px] text-slate-200 placeholder-slate-600 focus:outline-none"
+          />
+        </div>
+      ))}
+      {!ended && (
+        <button
+          onClick={add}
+          className="shrink-0 mt-1 flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-dashed border-slate-600 text-[11px] font-semibold text-sky-300 hover:border-sky-500 hover:bg-sky-500/10 cursor-pointer"
+        >
+          <Plus className="w-3 h-3" /> Add step
+        </button>
+      )}
+      {!ended && <span className="shrink-0 mt-2 text-[11px] text-slate-500">→ {tail}</span>}
+    </div>
+  );
+};
 
 interface Props {
   /** Backend id of the blueprint being edited; remount (key) to switch blueprints. */
@@ -59,6 +183,12 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
   // Build in Boomi: preview (dry run) first, then create after the user confirms
   type BuildPlan = Awaited<ReturnType<typeof api.buildBlueprint>>;
   const [processName, setProcessName] = useState<string>('');
+  // Boomi folder for the build ('' = the root build folder) and the folders that can be picked
+  const [folderId, setFolderId] = useState<string>('');
+  const [folders, setFolders] = useState<BoomiFolder[] | null>(null);
+  const [folderError, setFolderError] = useState<string | null>(null);
+  const [newFolderName, setNewFolderName] = useState<string | null>(null);
+  const [folderBusy, setFolderBusy] = useState<boolean>(false);
   const [buildPlan, setBuildPlan] = useState<BuildPlan | null>(null);
   const [buildResult, setBuildResult] = useState<BuildPlan | null>(null);
   const [buildError, setBuildError] = useState<string | null>(null);
@@ -69,11 +199,34 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
   const [promptSource, setPromptSource] = useState<'openai' | 'domain_engine'>('domain_engine');
   const [aiModelUsed, setAiModelUsed] = useState<string>('gpt-4o-mini');
 
-  // Re-index stages (STEP 01, 02, ...) and derive each category from position and shape kind
-  const normalizeStages = (stages: Stage[]): Stage[] => categorize(stages);
+  // Re-index stages (STEP 01, 02, ...) and derive each category from position and shape kind.
+  // The flow always opens with a Start shape and closes with Stop / Return Documents (or a Process Call whose
+  // sub-process ends at Stop); add them if missing.
+  const normalizeStages = (stages: Stage[]): Stage[] => {
+    const next = [...stages];
+    if (!next.length || kindOf(next[0].selectedShapeOrConnector) !== 'start') {
+      next.unshift({ id: `stage-start-${Date.now()}`, stepNumber: '', category: 'SOURCE SYSTEM', label: 'Start', selectedShapeOrConnector: 'Start - No Data', subLabel: 'Scheduled / manual run' });
+    }
+    const last = next[next.length - 1];
+    if (next.length < 2 || (kindOf(last.selectedShapeOrConnector) !== 'end' && !endsInSubprocess(last))) {
+      next.push({ id: `stage-end-${Date.now()}`, stepNumber: '', category: 'END SHAPE', label: 'Stop', selectedShapeOrConnector: 'Stop', subLabel: 'End and continue' });
+    }
+    return categorize(next);
+  };
 
   // Load preset blueprint
   const handleSelectPreset = (presetId: string) => {
+    // "Custom flow" starts a blank Start / Stop canvas to build your own flow, keeping this blueprint's id
+    if (!presetId) {
+      const blank = createBlankConfig();
+      setSelectedPresetId('');
+      setBlueprint(prev => ({ ...blank, blueprintId: prev.blueprintId }));
+      setBusinessRuleText('');
+      setAiGeneratedPrompt(null);
+      setPromptSource('domain_engine');
+      if (onShowToast) onShowToast('Custom flow started. Add your own stages.');
+      return;
+    }
     const preset = PRESET_BLUEPRINTS.find(p => p.id === presetId);
     if (preset) {
       setSelectedPresetId(presetId);
@@ -124,6 +277,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
         });
         setBusinessRuleText(saved.businessRule || '');
         setProcessName(saved.processName || '');
+        setFolderId(saved.folderId || '');
         setBuildResult(saved.buildResult || null);
         setSentAt(saved.sentAt || null);
         setDraftMeta({ origin: saved.origin || null, assumptions: Array.isArray(saved.assumptions) ? saved.assumptions : [] });
@@ -144,6 +298,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
     businessRule: currentConfig.businessRule,
     settings: currentConfig.settings,
     processName,
+    folderId: folderId || null,
     status: buildResult ? 'sent' : 'draft',
     sentAt,
     buildResult,
@@ -175,7 +330,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
     const timer = setTimeout(() => { saveNow(doc); }, 800);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [restored, currentConfig, selectedPresetId, processName, buildResult, sentAt]);
+  }, [restored, currentConfig, selectedPresetId, processName, folderId, buildResult, sentAt]);
 
   // Leaving the editor within the debounce window must not lose the last edit
   useEffect(() => () => {
@@ -194,6 +349,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
   const specGenerated = aiGeneratedPrompt !== null;
 
   // Compile with OpenAI via backend
+  const reviewRef = useRef<HTMLElement>(null);
   const handleGenerateCompanionSpec = async () => {
     setIsCompiling(true);
     let succeeded = false;
@@ -211,13 +367,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
         setPromptSource(res.source as 'openai' | 'domain_engine');
         setAiModelUsed(res.modelUsed || 'gpt-4o-mini');
         succeeded = true;
-        if (onShowToast) {
-          onShowToast(
-            res.source === 'openai'
-              ? `✨ Boomi Companion spec synthesized by OpenAI (${res.modelUsed || 'gpt-4o-mini'})!`
-              : '🚀 Boomi Companion spec compiled with the built-in rules engine.'
-          );
-        }
+        if (onShowToast) onShowToast('Companion spec ready. Review it below.');
       } else {
         // Local fallback
         setAiGeneratedPrompt(dynamicDomainPrompt);
@@ -231,13 +381,8 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
       if (onShowToast) onShowToast('Backend unavailable; spec generated locally.');
     } finally {
       setIsCompiling(false);
-      if (succeeded) {
-        confetti({
-          particleCount: 80,
-          spread: 60,
-          origin: { y: 0.7 }
-        });
-      }
+      // Bring the generated spec into view instead of celebrating
+      if (succeeded) setTimeout(() => reviewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
     }
   };
 
@@ -253,7 +398,23 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
     commitStages(next);
   };
 
-  // Add a shape at the end of the canvas; reorder with the arrows to place it anywhere
+  // Picking a shape renames the card and its tagline, unless the user already typed their own
+  const handleShapeChange = (index: number, shapeId: string) => {
+    const stage = blueprint.stages[index];
+    const prev = entryOf(stage.selectedShapeOrConnector);
+    const next = entryOf(shapeId);
+    const patch: Partial<Stage> = { selectedShapeOrConnector: shapeId };
+    const label = stage.label.trim();
+    if (next && (!label || label === 'New shape' || label === prev?.label || label === stage.selectedShapeOrConnector)) {
+      patch.label = next.label;
+    }
+    if (next && (!stage.subLabel || stage.subLabel === 'Custom step' || stage.subLabel === prev?.tag)) {
+      patch.subLabel = next.tag;
+    }
+    updateStage(index, patch);
+  };
+
+  // Add a shape just before the end shape; reorder with the arrows to place it anywhere in between
   const handleAddCustomStage = () => {
     const newStage: Stage = {
       id: `stage-${Date.now()}`,
@@ -263,19 +424,59 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
       selectedShapeOrConnector: 'Message',
       subLabel: 'Custom step',
     };
-    // Keep a trailing Stop / Return Documents last so new shapes land before the end of the flow
+    // The last card is always the end shape, so new shapes land right before it
     const stages = blueprint.stages;
-    const last = stages[stages.length - 1];
-    if (last && kindOf(last.selectedShapeOrConnector) === 'end') {
-      commitStages([...stages.slice(0, -1), newStage, last]);
-    } else {
-      commitStages([...stages, newStage]);
+    commitStages([...stages.slice(0, -1), newStage, stages[stages.length - 1]]);
+  };
+
+  // Every folder in the Boomi account, for choosing where the process is created
+  const loadFolders = async () => {
+    setFolderError(null);
+    try {
+      setFolders(await api.listBoomiFolders());
+    } catch (e) {
+      setFolderError((e as Error).message || 'Could not load Boomi folders.');
     }
+  };
+
+  useEffect(() => { loadFolders(); }, []);
+
+  // With no folder chosen, builds go to the main folder (the first top-level one)
+  const defaultFolderId = folders?.find((f) => !f.parentId)?.id ?? folders?.[0]?.id ?? '';
+  const folderPath = (id: string) => folders?.find((f) => f.id === (id || defaultFolderId))?.fullPath ?? '';
+
+  // New folder inside the selected one (or the main folder), then selected for the build
+  const handleCreateFolder = async () => {
+    const name = (newFolderName || '').trim();
+    if (!name || !folders?.length) return;
+    setFolderBusy(true);
+    setFolderError(null);
+    try {
+      const created = await api.createBoomiFolder(name, folderId || defaultFolderId);
+      setFolders([...folders, created].sort((a, b) => a.fullPath.toLowerCase().localeCompare(b.fullPath.toLowerCase())));
+      setFolderId(created.id);
+      setNewFolderName(null);
+      if (onShowToast) onShowToast(`Folder "${created.name}" created in Boomi.`);
+    } catch (e) {
+      setFolderError((e as Error).message || 'Could not create the folder.');
+    } finally {
+      setFolderBusy(false);
+    }
+  };
+
+  // Only the cards between Start and the end shape move, and never into the first or last slot
+  // Shapes on a Branch's paths 2..N. Path 1 is the main flow; each other path ends at a Stop in Boomi.
+  const setPath = (index: number, b: number, path: Stage[]) => {
+    const stage = blueprint.stages[index];
+    const paths = Array.from({ length: Math.max(branchCount(stage) - 1, b - 1) }, (_, i) => stage.branchPaths?.[i] ?? []);
+    paths[b - 2] = path;
+    updateStage(index, { branchPaths: paths });
   };
 
   const handleMoveStage = (index: number, dir: -1 | 1) => {
     const target = index + dir;
-    if (target < 0 || target >= blueprint.stages.length) return;
+    if (index <= 0 || index >= blueprint.stages.length - 1) return;
+    if (target <= 0 || target >= blueprint.stages.length - 1) return;
     const next = [...blueprint.stages];
     [next[index], next[target]] = [next[target], next[index]];
     commitStages(next);
@@ -283,8 +484,11 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
 
   // Remove stage: ensure at least 2 stages remain
   const handleRemoveStage = (id: string) => {
-    if (blueprint.stages.length <= 2) {
-      if (onShowToast) onShowToast('Keep at least two shapes on the canvas');
+    const index = blueprint.stages.findIndex(s => s.id === id);
+    const isLastCard = index === blueprint.stages.length - 1;
+    // The end card may go only when the Process Call before it already ends the flow (its sub-process stops)
+    if (index <= 0 || (isLastCard && !endsInSubprocess(blueprint.stages[index - 1]))) {
+      if (onShowToast) onShowToast('The Start and end shapes stay. Change them with the dropdown instead.');
       return;
     }
     commitStages(blueprint.stages.filter(s => s.id !== id));
@@ -292,6 +496,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
 
   const buildRequest = (dryRun: boolean) => ({
     processName: processName.trim() || currentConfig.title.replace(/\s+/g, '_'),
+    folderId: folderId || undefined,
     stages: currentConfig.stages,
     description: `Built with ArchForge (${currentConfig.blueprintId})`,
     dryRun,
@@ -424,6 +629,59 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
           className="w-full sm:w-64"
         />
 
+        {/* Boomi folder that Build in Boomi creates the process in; + New folder creates one inside it */}
+        <div className="flex items-center gap-1.5 w-full lg:w-auto">
+          <Select
+            label="Boomi folder"
+            icon={FolderOpen}
+            value={folders ? (folderId || defaultFolderId) : ''}
+            onChange={(v) => setFolderId(v === defaultFolderId ? '' : v)}
+            options={folders
+              ? folders.map((f) => ({ value: f.id, label: f.fullPath.split('/').join(' / ') }))
+              : [{ value: '', label: folderError ? 'Folders unavailable' : 'Loading folders…' }]}
+            searchable
+            disabled={!folders}
+            className="min-w-0 flex-1 lg:w-72"
+          />
+          <button
+            type="button"
+            onClick={() => (folders ? setNewFolderName(newFolderName === null ? '' : null) : loadFolders())}
+            title={folders ? 'Create a folder inside the selected one' : 'Load folders again'}
+            className="shrink-0 flex items-center gap-1 px-3 py-2.5 rounded-xl border border-slate-700 text-xs font-semibold text-sky-300 hover:border-sky-500 hover:bg-sky-500/10 cursor-pointer"
+          >
+            {folders ? <><FolderPlus className="w-4 h-4" /> New folder</> : <><RotateCcw className="w-3.5 h-3.5" /> Retry</>}
+          </button>
+        </div>
+
+        {newFolderName !== null && folders && (
+          <div className="w-full flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-slate-400">New folder inside <span className="font-mono text-slate-200">{folderPath(folderId)}</span>:</span>
+            <input
+              type="text"
+              autoFocus
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleCreateFolder(); if (e.key === 'Escape') setNewFolderName(null); }}
+              placeholder="Folder name"
+              aria-label="New folder name"
+              maxLength={80}
+              className="w-56 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white focus:outline-none focus:border-sky-500"
+            />
+            <button
+              type="button"
+              onClick={handleCreateFolder}
+              disabled={folderBusy || !newFolderName.trim() || newFolderName.includes('/')}
+              className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold disabled:opacity-60 cursor-pointer"
+            >
+              {folderBusy ? 'Creating…' : 'Create'}
+            </button>
+            <button type="button" onClick={() => setNewFolderName(null)} className="px-2 py-1.5 text-slate-400 hover:text-white cursor-pointer">
+              Cancel
+            </button>
+          </div>
+        )}
+        {folderError && <div className="w-full text-xs text-rose-300">{folderError}</div>}
+
       </div>
 
       {/* Shown for drafts the AI wrote from a chat description: the user reviews before anything is built */}
@@ -528,7 +786,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
                     <div className="flex items-center gap-0.5 text-slate-500">
                       <button
                         onClick={() => handleMoveStage(idx, -1)}
-                        disabled={isSource}
+                        disabled={idx <= 1 || isLast}
                         title="Move earlier"
                         aria-label="Move shape earlier"
                         className="px-1.5 py-0.5 rounded hover:bg-slate-800 hover:text-slate-200 disabled:opacity-30 cursor-pointer"
@@ -537,7 +795,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
                       </button>
                       <button
                         onClick={() => handleMoveStage(idx, 1)}
-                        disabled={isLast}
+                        disabled={isSource || idx >= blueprint.stages.length - 2}
                         title="Move later"
                         aria-label="Move shape later"
                         className="px-1.5 py-0.5 rounded hover:bg-slate-800 hover:text-slate-200 disabled:opacity-30 cursor-pointer"
@@ -546,9 +804,12 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
                       </button>
                       <button
                         onClick={() => handleRemoveStage(stage.id)}
-                        title="Remove shape"
+                        disabled={isSource || (isLast && !endsInSubprocess(blueprint.stages[idx - 1]))}
+                        title={isSource || (isLast && !endsInSubprocess(blueprint.stages[idx - 1]))
+                          ? 'Start and end shapes stay; change them with the dropdown'
+                          : isLast ? 'Remove the end shape: the Process Call before it ends the flow' : 'Remove shape'}
                         aria-label="Remove shape"
-                        className="hover:text-rose-400 transition cursor-pointer p-1 rounded hover:bg-slate-800"
+                        className="hover:text-rose-400 transition cursor-pointer p-1 rounded hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-slate-500"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -572,11 +833,50 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
                   <Select
                     ariaLabel={`${stepNum} shape type`}
                     value={stage.selectedShapeOrConnector}
-                    onChange={(v) => updateStage(idx, { selectedShapeOrConnector: v })}
-                    options={SHAPE_OPTIONS}
+                    onChange={(v) => handleShapeChange(idx, v)}
+                    options={shapeOptionsFor(isSource, isLast, stage.selectedShapeOrConnector)}
                     searchable
                     size="sm"
                   />
+
+                  {/* Boomi allows 2 to 25 branches; branch 1 continues the flow, the others end at their own Stop */}
+                  {stage.selectedShapeOrConnector === 'Branch' && (
+                    <div className="mt-2 flex items-center justify-between gap-2 rounded-lg bg-slate-950/60 border border-slate-800 px-2.5 py-1.5">
+                      <span className="text-[11px] font-semibold text-slate-400">Branches</span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => updateStage(idx, { branches: Math.max(MIN_BRANCHES, branchCount(stage) - 1) })}
+                          disabled={branchCount(stage) <= MIN_BRANCHES}
+                          aria-label="Fewer branches"
+                          className="w-6 h-6 rounded-md text-slate-300 hover:bg-slate-800 disabled:opacity-30 cursor-pointer"
+                        >
+                          −
+                        </button>
+                        <input
+                          type="number"
+                          min={MIN_BRANCHES}
+                          max={MAX_BRANCHES}
+                          value={branchCount(stage)}
+                          onChange={(e) => {
+                            const n = parseInt(e.target.value, 10);
+                            if (!Number.isNaN(n)) updateStage(idx, { branches: Math.min(MAX_BRANCHES, Math.max(MIN_BRANCHES, n)) });
+                          }}
+                          aria-label={`${stepNum} number of branches`}
+                          className="w-10 bg-transparent text-center text-xs font-bold text-white focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => updateStage(idx, { branches: Math.min(MAX_BRANCHES, branchCount(stage) + 1) })}
+                          disabled={branchCount(stage) >= MAX_BRANCHES}
+                          aria-label="More branches"
+                          className="w-6 h-6 rounded-md text-slate-300 hover:bg-slate-800 disabled:opacity-30 cursor-pointer"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   <textarea
                     value={stage.notes || ''}
@@ -608,6 +908,58 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
             );
           })}
         </div>
+
+        {/* Shapes on each Branch's other paths; path 1 is the main flow above */}
+        {blueprint.stages.map((stage, idx) => stage.selectedShapeOrConnector !== 'Branch' ? null : (
+          <div key={`paths-${stage.id}`} className="rounded-xl bg-slate-950/60 border border-slate-800 p-3.5 space-y-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <div className="text-xs font-bold text-slate-200">
+                STEP {String(idx + 1).padStart(2, '0')} · {stage.label || 'Branch'} paths
+              </div>
+              <div className="text-[11px] text-slate-500">
+                Path 1 continues with the cards above. Each other path ends at a Stop unless you end it yourself.
+              </div>
+            </div>
+            {Array.from({ length: branchCount(stage) - 1 }, (_, i) => i + 2).map((b) => (
+              <StepRow
+                key={b}
+                title={`Path ${b}`}
+                steps={pathOf(stage, b)}
+                options={PATH_OPTIONS}
+                tail="Stop"
+                onChange={(path) => setPath(idx, b, path)}
+              />
+            ))}
+          </div>
+        ))}
+
+        {/* Steps inside each Process Call's sub-process: Data Passthrough start -> these steps -> Return Documents */}
+        {blueprint.stages.map((stage, idx) => stage.selectedShapeOrConnector !== 'Process Call' ? null : (
+          <div key={`sub-${stage.id}`} className="rounded-xl bg-slate-950/60 border border-slate-800 p-3.5 space-y-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <div className="text-xs font-bold text-slate-200">
+                STEP {String(idx + 1).padStart(2, '0')} · {stage.label || 'Process Call'} sub-process
+              </div>
+              <div className="text-[11px] text-slate-500">
+                Built as its own process and linked to this Process Call. Its documents return to the next card.
+              </div>
+            </div>
+            <StepRow
+              title="Steps"
+              lead="Data Passthrough →"
+              steps={stage.subprocessSteps ?? []}
+              options={SUBPROCESS_OPTIONS}
+              tail="Return Documents"
+              onChange={(steps) => updateStage(idx, { subprocessSteps: steps })}
+            />
+            {endsInSubprocess(stage) && (
+              <p className="text-[11px] text-amber-300">
+                This sub-process ends at {subprocessEnd(stage)?.label || 'Stop'}, so it returns nothing and the cards after this Process Call won't run.
+                {idx === blueprint.stages.length - 2 ? ' You can delete the end card after it.' : ''} Delete that step to return documents again.
+              </p>
+            )}
+          </div>
+        ))}
 
         {/* Collapsible Architecture Guardrails Toggles */}
         {showAdvancedSettings && (
@@ -742,7 +1094,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
             {isCompiling ? (
               <>
                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                <span>Compiling with OpenAI ({aiModelUsed})...</span>
+                <span>Generating spec…</span>
               </>
             ) : (
               <>
@@ -756,7 +1108,7 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
       </section>
 
       {/* SECTION 02: COMPILE & REVIEW */}
-      <section className="space-y-4">
+      <section ref={reviewRef} className="space-y-4 scroll-mt-6">
         <div className="flex items-center justify-between">
           <div>
             <div className="text-[10px] font-bold uppercase tracking-wider text-sky-400">
@@ -841,6 +1193,10 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
                         className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white font-mono focus:outline-none focus:border-sky-500"
                       />
                     </label>
+                    <div className="text-slate-400">
+                      Folder in Boomi: <span className="text-slate-200 font-mono">{folderPath(folderId) || 'loading…'}</span>
+                      <span className="text-slate-500"> (change it in the toolbar at the top)</span>
+                    </div>
                     <ol className="space-y-1">
                       {buildPlan.shapes.map((s, i) => (
                         <li key={i} className="flex items-start gap-2">
@@ -868,8 +1224,8 @@ export const VisualArchitectureCompiler: React.FC<Props> = ({ blueprintId: docId
                     )}
                     {buildPlan.shapes.some(s => s.placeholder) && (
                       <p className="text-amber-300/90">
-                        Placeholders are Message shapes in the right position. Maps, rules and other connectors need their
-                        own components, so configure those shapes in Boomi.
+                        Placeholders are Message shapes in the right position. Steps Boomi can't build from here yet need
+                        configuring in Boomi.
                       </p>
                     )}
                     <div className="flex gap-2">

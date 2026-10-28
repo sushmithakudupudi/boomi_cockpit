@@ -4,13 +4,15 @@ interface Props {
   className?: string;
   /** Draw the small base bar under the arch (used on the large welcome logo). */
   base?: boolean;
+  /** Spin the spark in the middle of the arch (used while Keystone AI is thinking). */
+  thinking?: boolean;
 }
 
 /**
  * Keystone AI mark: an arch (what a keystone holds together), the keystone wedge at its top,
  * and a four-point spark for the AI. Gradient from violet to pink.
  */
-export const KeystoneLogo: React.FC<Props> = ({ className = 'w-6 h-6', base = false }) => {
+export const KeystoneLogo: React.FC<Props> = ({ className = 'w-6 h-6', base = false, thinking = false }) => {
   const id = useId().replace(/:/g, '');
   const grad = `ks-grad-${id}`;
   return (
@@ -24,7 +26,12 @@ export const KeystoneLogo: React.FC<Props> = ({ className = 'w-6 h-6', base = fa
       </defs>
       <path d="M9 40 V26 C9 16 15 10 24 10 C33 10 39 16 39 26 V40" fill="none" stroke={`url(#${grad})`} strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M18 3.5 H30 L27.5 11 H20.5 Z" fill={`url(#${grad})`} stroke={`url(#${grad})`} strokeWidth="1.5" strokeLinejoin="round" />
-      <path d="M24 19 L26.6 24.4 L32 27 L26.6 29.6 L24 35 L21.4 29.6 L16 27 L21.4 24.4 Z" fill={`url(#${grad})`} />
+      <path
+        d="M24 19 L26.6 24.4 L32 27 L26.6 29.6 L24 35 L21.4 29.6 L16 27 L21.4 24.4 Z"
+        fill={`url(#${grad})`}
+        className={thinking ? 'animate-spin' : undefined}
+        style={thinking ? { transformBox: 'view-box', transformOrigin: '24px 27px', animationDuration: '1.4s' } : undefined}
+      />
       {base && <rect x="15" y="43.5" width="18" height="3" rx="1.5" fill="#FF2D78" />}
     </svg>
   );

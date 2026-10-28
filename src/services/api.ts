@@ -11,6 +11,13 @@ import { mockExecutions, mockAtoms, initialProcessNodes, initialProcessEdges } f
 
 const BASE_URL = '/api';
 
+export interface BoomiFolder {
+  id: string;
+  name: string;
+  fullPath: string;
+  parentId: string;
+}
+
 /** Error carrying the backend's code/message so the UI can explain exactly what failed. */
 export class ApiError extends Error {
   code: string;
@@ -389,6 +396,7 @@ export const api = {
     processName: string;
     stages: any[];
     description?: string;
+    folderId?: string;
     dryRun?: boolean;
   }): Promise<{
     dryRun: boolean;
@@ -406,6 +414,29 @@ export const api = {
     });
     if (!res.ok) {
       const detail = await res.json().then(j => j.detail).catch(() => '');
+      throw new Error(detail || `HTTP error ${res.status}`);
+    }
+    return await res.json();
+  },
+
+  // Boomi folders that ArchForge can build into: the build folder and everything below it
+  async listBoomiFolders(): Promise<BoomiFolder[]> {
+    const res = await fetch(`${BASE_URL}/companion/boomi-folders`);
+    if (!res.ok) {
+      const detail = await res.json().then(j => j.detail).catch(() => '');
+      throw new Error(detail || `HTTP error ${res.status}`);
+    }
+    return await res.json();
+  },
+
+  async createBoomiFolder(name: string, parentId: string): Promise<BoomiFolder> {
+    const res = await fetch(`${BASE_URL}/companion/boomi-folders`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, parentId }),
+    });
+    if (!res.ok) {
+      const detail = await res.json().then(j => (typeof j.detail === 'string' ? j.detail : j.detail?.message)).catch(() => '');
       throw new Error(detail || `HTTP error ${res.status}`);
     }
     return await res.json();

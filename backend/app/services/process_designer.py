@@ -12,7 +12,7 @@ import secrets
 from typing import Any, Dict, List, Optional
 
 from . import blueprint_store
-from .boomi_process_builder import plan_shapes
+from .boomi_process_builder import CONNECTOR_SHAPE_IDS, START_SHAPE_IDS, plan_shapes
 
 logger = logging.getLogger("process_designer")
 
@@ -21,13 +21,13 @@ MAX_STAGES = 15
 MAX_TOKENS = 1400
 DAILY_CAP = 30
 
-START_SHAPES = ["Start - No Data", "REST API", "Web Services Server (Listen)", "SAP Enterprise Connector",
-                "Salesforce Outbound Messaging", "Database / JDBC", "AWS SQS / S3", "Apache Kafka"]
+START_SHAPES = list(START_SHAPE_IDS)
 PROCESS_SHAPES = ["Message", "Set Properties", "Data Process (Split/Combine)", "Map & transform", "Business Rules & DPP Shape",
-                  "Decision & Route Shapes", "Try/Catch & Set Properties", "Notify"]
-CONNECTOR_SHAPES = ["Boomi Platform API", "HTTP Client", "Salesforce", "NetSuite SuiteTalk", "SAP ERP",
-                    "PostgreSQL Database", "AWS S3 Data Lake", "ServiceNow"]
-END_SHAPES = ["Stop", "Return Documents"]
+                  "Decision & Route Shapes", "Try/Catch & Set Properties", "Notify", "Process Call", "Process Route",
+                  "Branch", "Route", "Cleanse", "Find Changes", "Flow Control", "Retrieve From Cache", "Program Command",
+                  "Agent"]
+CONNECTOR_SHAPES = list(CONNECTOR_SHAPE_IDS)
+END_SHAPES = ["Stop", "Return Documents", "Exception", "Add to Cache", "Remove From Cache"]
 ALLOWED = set(START_SHAPES + PROCESS_SHAPES + CONNECTOR_SHAPES + END_SHAPES)
 
 SYSTEM_PROMPT = f"""You design Dell Boomi integration processes as a left-to-right list of shapes for the ArchForge designer.

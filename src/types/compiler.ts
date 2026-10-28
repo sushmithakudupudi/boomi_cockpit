@@ -15,6 +15,9 @@ export interface Stage {
   subLabel?: string; // e.g. "JSON / payload", "+ Add custom step", "Target connector"
   badgeText?: string; // e.g. "FILTER", "ROUTE" between stages
   notes?: string; // what this shape must do, e.g. "Base64 decode the payload"
+  branches?: number; // Branch shape only: number of paths, 2-25 (Boomi's limit)
+  branchPaths?: Stage[][]; // Branch shape only: shapes on paths 2..N (path 1 is the main flow)
+  subprocessSteps?: Stage[]; // Process Call only: steps between the sub-process's start and Return Documents
   details?: {
     connectorType?: string;
     action?: string; // GET, POST, UPSERT, QUERY, LISTEN

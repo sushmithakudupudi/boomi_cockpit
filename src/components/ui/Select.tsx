@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, ChevronDown, X } from 'lucide-react';
+import { Check, ChevronDown, Search, X } from 'lucide-react';
 
 export interface SelectOption<V extends string | number = string> {
   value: V;
@@ -22,7 +22,7 @@ interface Props<V extends string | number> {
   placeholder?: string;
   /** Show a clear (✕) button that resets to this value. */
   clearValue?: V;
-  /** Type-to-filter. Defaults to on when there are more than 7 options. */
+  /** Search box pinned at the top of the open list. Defaults to on when there are more than 7 options. */
   searchable?: boolean;
   /** Icon shown at the start of the field. */
   icon?: React.ElementType;
@@ -42,7 +42,7 @@ const TONE = {
 const LIST_MAX = 280;
 const LIST_MIN_WIDTH = 300;
 
-/** Dropdown used across the app: outlined field with floating label, clear button, filterable rounded list. */
+/** Dropdown used across the app: outlined field with floating label, clear button, searchable rounded list. */
 export function Select<V extends string | number>({
   value, onChange, options, label, ariaLabel, placeholder = 'Select…', clearValue, searchable,
   icon: Icon, tone = 'default', size = 'md', disabled, className = '',
@@ -51,13 +51,14 @@ export function Select<V extends string | number>({
   const fieldRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const [pos, setPos] = useState<{ left: number; width: number; top?: number; bottom?: number; maxHeight: number }>({ left: 0, width: 0, maxHeight: LIST_MAX });
 
   const canSearch = searchable ?? options.length > 7;
-  const typing = open && canSearch;
   const selected = options.find((o) => o.value === value);
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -102,11 +103,16 @@ export function Select<V extends string | number>({
     if (!open) return;
     const onDown = (e: MouseEvent) => {
       const t = e.target as Node;
-      if (!fieldRef.current?.contains(t) && !listRef.current?.contains(t)) close();
+      if (!fieldRef.current?.contains(t) && !popRef.current?.contains(t)) close();
     };
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
   }, [open]);
+
+  // Typing goes straight into the search box when the list opens
+  useEffect(() => {
+    if (open && canSearch) searchRef.current?.focus({ preventScroll: true });
+  }, [open, canSearch]);
 
   // Keep the highlighted option in view while using the keyboard.
   useEffect(() => {
@@ -116,14 +122,13 @@ export function Select<V extends string | number>({
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (disabled) return;
     if (!open && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === ' ')) {
-      if (e.key === ' ' && canSearch) return;
       e.preventDefault(); openList(); return;
     }
     if (!open) return;
     if (e.key === 'ArrowDown') { e.preventDefault(); setActive((i) => Math.min(filtered.length - 1, i + 1)); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((i) => Math.max(0, i - 1)); }
     else if (e.key === 'Enter') { e.preventDefault(); if (filtered[active]) choose(filtered[active]); }
-    else if (e.key === 'Escape') { e.preventDefault(); close(); }
+    else if (e.key === 'Escape') { e.preventDefault(); close(); inputRef.current?.focus(); }
     else if (e.key === 'Tab') close();
   };
 
@@ -133,13 +138,45 @@ export function Select<V extends string | number>({
 
   let lastGroup: string | undefined;
   const list = open && createPortal(
+    <div
+      ref={popRef}
+      style={{ position: 'fixed', left: pos.left, width: pos.width, top: pos.top, bottom: pos.bottom, maxHeight: pos.maxHeight }}
+      className="z-[70] flex flex-col rounded-xl bg-boomi-card border border-boomi-cardBorder shadow-2xl shadow-black/30 animate-fade-in overflow-hidden"
+    >
+    {canSearch && (
+      <div className="shrink-0 p-1.5 pb-1 border-b border-boomi-cardBorder">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
+          <input
+            ref={searchRef}
+            role="searchbox"
+            aria-label={`Search ${label || ariaLabel || 'options'}`}
+            aria-controls={`${id}-list`}
+            value={query}
+            onChange={(e) => { setQuery(e.target.value); setActive(0); }}
+            onKeyDown={onKeyDown}
+            placeholder="Search…"
+            className="w-full pl-8 pr-7 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-[13px] text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-boomi-accent"
+          />
+          {query && (
+            <button
+              type="button"
+              aria-label="Clear search"
+              onMouseDown={(e) => { e.preventDefault(); setQuery(''); setActive(0); searchRef.current?.focus(); }}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 rounded text-slate-400 hover:text-white cursor-pointer"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+      </div>
+    )}
     <ul
       ref={listRef}
       id={`${id}-list`}
       role="listbox"
       aria-label={label || ariaLabel}
-      style={{ position: 'fixed', left: pos.left, width: pos.width, top: pos.top, bottom: pos.bottom, maxHeight: pos.maxHeight }}
-      className="z-[70] overflow-y-auto overscroll-contain p-1.5 rounded-xl bg-boomi-card border border-boomi-cardBorder shadow-2xl shadow-black/30 animate-fade-in"
+      className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1.5"
     >
       {filtered.length === 0 && <li className="px-3 py-2.5 text-xs text-slate-500">No matches</li>}
       {filtered.map((o, i) => {
@@ -155,17 +192,19 @@ export function Select<V extends string | number>({
               data-index={i}
               onMouseEnter={() => setActive(i)}
               onMouseDown={(e) => { e.preventDefault(); choose(o); }}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] cursor-pointer transition-colors ${
+              className={`flex items-start gap-2 px-3 py-2 rounded-lg text-[13px] cursor-pointer transition-colors ${
                 i === active ? 'bg-slate-800 text-white' : 'text-slate-300'} ${isSel ? 'font-semibold text-boomi-accent' : ''}`}
             >
-              <span className="flex-1 min-w-0 truncate" title={o.label}>{o.label}</span>
-              {o.hint && <span className="shrink-0 text-[10px] text-slate-500">{o.hint}</span>}
-              {isSel && <Check className="w-3.5 h-3.5 shrink-0 text-boomi-accent" />}
+              {/* Long names (e.g. folder paths) wrap so the whole name is readable */}
+              <span className="flex-1 min-w-0 break-words leading-snug" title={o.label}>{o.label}</span>
+              {o.hint && <span className="shrink-0 mt-0.5 text-[10px] text-slate-500">{o.hint}</span>}
+              {isSel && <Check className="w-3.5 h-3.5 shrink-0 mt-0.5 text-boomi-accent" />}
             </li>
           </React.Fragment>
         );
       })}
-    </ul>,
+    </ul>
+    </div>,
     document.body,
   );
 
@@ -173,7 +212,7 @@ export function Select<V extends string | number>({
     <div className={`relative min-w-0 ${className}`}>
       <div
         ref={fieldRef}
-        onMouseDown={(e) => { if (e.target === inputRef.current && open) return; e.preventDefault(); open ? close() : openList(); inputRef.current?.focus(); }}
+        onMouseDown={(e) => { e.preventDefault(); if (open) { close(); inputRef.current?.focus(); } else { openList(); if (!canSearch) inputRef.current?.focus(); } }}
         className={`relative flex items-center gap-2 px-3 ${pad} rounded-xl border bg-boomi-card transition ${open ? t.focus : `${t.border} hover:border-slate-500`} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
       >
         {label && (
@@ -184,11 +223,9 @@ export function Select<V extends string | number>({
           </span>
         )}
         {Icon && <Icon className="w-3.5 h-3.5 shrink-0 text-slate-500" />}
-        {!typing && (
-          <span className={`flex-1 min-w-0 truncate ${selected ? 'text-slate-100' : 'text-slate-500'}`} title={selected?.label}>
-            {selected?.label ?? placeholder}
-          </span>
-        )}
+        <span className={`flex-1 min-w-0 truncate ${selected ? 'text-slate-100' : 'text-slate-500'}`} title={selected?.label}>
+          {selected?.label ?? placeholder}
+        </span>
         <input
           ref={inputRef}
           role="combobox"
@@ -196,15 +233,12 @@ export function Select<V extends string | number>({
           aria-controls={`${id}-list`}
           aria-autocomplete={canSearch ? 'list' : 'none'}
           aria-label={label || ariaLabel}
-          readOnly={!canSearch || !open}
+          readOnly
           disabled={disabled}
-          value={typing ? query : selected?.label ?? ''}
-          placeholder={typing ? (selected?.label || 'Type to filter…') : placeholder}
-          onChange={(e) => { setQuery(e.target.value); setActive(0); }}
+          value={selected?.label ?? ''}
+          placeholder={placeholder}
           onKeyDown={onKeyDown}
-          className={typing
-            ? 'flex-1 min-w-0 bg-transparent text-slate-100 placeholder:text-slate-500 focus:outline-none cursor-text'
-            : 'absolute inset-0 w-full h-full opacity-0 cursor-pointer'}
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
         />
         {showClear && (
           <button

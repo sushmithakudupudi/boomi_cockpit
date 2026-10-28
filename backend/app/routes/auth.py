@@ -33,6 +33,11 @@ class CreateUserRequest(SetupRequest):
     role: str = "operator"
 
 
+class ResetPasswordRequest(BaseModel):
+    email: str = Field(max_length=254)
+    password: str = Field(max_length=256)
+
+
 class UserOut(BaseModel):
     id: int
     email: str
@@ -121,6 +126,14 @@ def login(body: LoginRequest, request: Request, response: Response, db: Session 
         _raise(e)
     _set_cookie(request, response, new)
     return auth.public_user(new.session.user)
+
+
+@router.post("/reset-password", status_code=204)
+def reset_password(body: ResetPasswordRequest, db: Session = Depends(_db)):
+    try:
+        auth.reset_password(db, body.email, body.password)
+    except AuthError as e:
+        _raise(e)
 
 
 @router.post("/logout", status_code=204)

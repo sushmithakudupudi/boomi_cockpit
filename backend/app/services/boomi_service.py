@@ -698,6 +698,45 @@ class BoomiService:
             raise RuntimeError(f"Boomi API rejected the {what} ({res.status_code}): {res.text[:300]}")
         return ET.fromstring(res.text)
 
+    async def list_folders(self) -> List[Dict[str, str]]:
+        """Every folder in the Boomi account (not deleted), sorted by path so sub-folders follow their parent."""
+        auth = self._get_boomi_auth()
+        if not auth or not settings.BOOMI_ACCOUNT_ID:
+            raise ValueError("Boomi credentials not configured.")
+        base = f"{settings.BOOMI_BASE_URL.rstrip('/')}/{settings.BOOMI_ACCOUNT_ID.strip()}"
+        headers = {"Accept": "application/json"}
+        query = {"QueryFilter": {"expression": {"argument": ["false"], "operator": "EQUALS", "property": "deleted"}}}
+        folders: List[Dict[str, Any]] = []
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            res = await client.post(f"{base}/Folder/query", json=query, auth=auth, headers=headers)
+            while True:
+                if res.status_code != 200:
+                    raise RuntimeError(f"Boomi API could not list folders ({res.status_code}).")
+                page = res.json()
+                folders.extend(page.get("result", []))
+                token = page.get("queryToken")
+                if not token or len(folders) >= 2000:
+                    break
+                res = await client.post(f"{base}/Folder/queryMore", content=token, auth=auth,
+                                        headers={**headers, "Content-Type": "text/plain"})
+        out = [{"id": f["id"], "name": f.get("name", ""), "fullPath": f.get("fullPath", ""), "parentId": f.get("parentId", "")}
+               for f in folders]
+        return sorted(out, key=lambda f: f["fullPath"].lower())
+
+    async def create_folder(self, name: str, parent_id: str) -> Dict[str, str]:
+        auth = self._get_boomi_auth()
+        if not auth or not settings.BOOMI_ACCOUNT_ID:
+            raise ValueError("Boomi credentials not configured.")
+        base = f"{settings.BOOMI_BASE_URL.rstrip('/')}/{settings.BOOMI_ACCOUNT_ID.strip()}"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            res = await client.post(f"{base}/Folder", json={"name": name, "parentId": parent_id}, auth=auth,
+                                    headers={"Accept": "application/json", "Content-Type": "application/json"})
+        if res.status_code not in (200, 201):
+            logger.warning(f"Error creating folder ({res.status_code}): {res.text}")
+            raise RuntimeError(f"Boomi API rejected the folder ({res.status_code}): {res.text[:300]}")
+        f = res.json()
+        return {"id": f["id"], "name": f.get("name", name), "fullPath": f.get("fullPath", ""), "parentId": f.get("parentId", parent_id)}
+
     async def create_process_from_blueprint(
         self,
         name: str,
@@ -708,7 +747,10 @@ class BoomiService:
         """Creates the connection and operation components for connector shapes, then the process."""
         import re
         from .boomi_process_builder import (
-            build_process_xml, build_rest_connection_xml, build_rest_operation_xml, safe_process_name,
+            UNREFERENCED_KINDS, as_placeholders, build_database_connection_xml, build_database_operation_xml,
+            build_disk_connection_xml, build_disk_operation_xml, build_json_profile_xml, build_map_xml,
+            build_process_xml, build_rest_connection_xml, build_rest_operation_xml, build_subprocess_xml,
+            iter_entries, linked, safe_process_name,
         )
 
         auth = self._get_boomi_auth()
@@ -722,7 +764,7 @@ class BoomiService:
         components: List[Dict[str, str]] = []
 
         async with httpx.AsyncClient(timeout=30.0) as client:
-            connectors = [e for e in plan if e["kind"] == "connectoraction"]
+            connectors = [e for e in iter_entries(plan) if e["kind"] == "connectoraction"]
             try:
                 if connectors:
                     conn_name = f"{safe_name}_Platform_API_Connection"
@@ -748,10 +790,104 @@ class BoomiService:
                         components.append({"type": "operation", "name": op_name, "id": op_id})
                         e["connectionId"], e["operationId"] = conn_id, op_id
 
-                root = await self._post_component(
-                    client, auth, url,
-                    build_process_xml(safe_name, description, folder_id, plan),
-                    "process component",
+                async def post_process(build, entries: List[Dict[str, Any]], what: str):
+                    """Posts a process; if Boomi refuses unconfigured steps, retries once with them as placeholders."""
+                    try:
+                        return await self._post_component(client, auth, url, build(entries), what)
+                    except RuntimeError as err:
+                        unref = {e["kind"] for e in iter_entries(entries) if not linked(e)} & UNREFERENCED_KINDS
+                        if not unref or "(400)" not in str(err):
+                            raise
+                        logger.warning(f"Retrying {what} without unconfigured {sorted(unref)}: {err}")
+                        entries[:] = as_placeholders(entries, unref)
+                        return await self._post_component(client, auth, url, build(entries), what)
+
+                used_names: Dict[str, int] = {}
+
+                def unique_name(label: str, fallback: str) -> str:
+                    base_name = f"{safe_name}_{re.sub(r'[^A-Za-z0-9]+', '_', label).strip('_') or fallback}"
+                    used_names[base_name] = used_names.get(base_name, 0) + 1
+                    return base_name if used_names[base_name] == 1 else f"{base_name}_{used_names[base_name]}"
+
+                async def create(xml: str, ctype: str, cname: str, what: str) -> str:
+                    root = await self._post_component(client, auth, url, xml, what)
+                    cid = root.attrib.get("componentId", "")
+                    components.append({"type": ctype, "name": cname, "id": cid})
+                    return cid
+
+                async def json_profile(cname: str, desc: str, what: str) -> str:
+                    return await create(build_json_profile_xml(cname, desc, folder_id), "profile", cname, what)
+
+                # Database, Disk V2 and HTTP Client steps get their own connection and operation (blank credentials)
+                for e in iter_entries(plan):
+                    if e["kind"] != "connector" or not e.get("family"):
+                        continue
+                    base_name = unique_name(e["label"], "Connector")
+                    conn_name, op_name = f"{base_name}_Connection", f"{base_name}_Operation"
+                    if e["family"] == "database":
+                        req = await json_profile(f"{base_name}_Request_Profile", f"Query parameters for '{e['label']}'.", f"request profile for '{e['label']}'")
+                        resp = await json_profile(f"{base_name}_Response_Profile", f"Rows returned by '{e['label']}'. Add the columns.", f"response profile for '{e['label']}'")
+                        e["requestProfileId"] = req
+                        e["connectionId"] = await create(
+                            build_database_connection_xml(conn_name, f"Database connection for '{e['label']}'. Enter the URL, username and password.", folder_id, e["shape"]),
+                            "connection", conn_name, f"connection for '{e['label']}'")
+                        e["operationId"] = await create(
+                            build_database_operation_xml(op_name, f"Standard Get for '{e['label']}'.", folder_id, e["sql"], req, resp),
+                            "operation", op_name, f"operation for '{e['label']}'")
+                    elif e["family"] == "disk":
+                        resp = await json_profile(f"{base_name}_Response_Profile", f"File details returned by '{e['label']}'.", f"response profile for '{e['label']}'")
+                        e["connectionId"] = await create(
+                            build_disk_connection_xml(conn_name, f"Disk V2 connection for '{e['label']}'.", folder_id),
+                            "connection", conn_name, f"connection for '{e['label']}'")
+                        e["operationId"] = await create(
+                            build_disk_operation_xml(op_name, f"Writes the document to a file for '{e['label']}'.", folder_id, resp),
+                            "operation", op_name, f"operation for '{e['label']}'")
+                    else:
+                        e["connectionId"] = await create(
+                            build_rest_connection_xml(conn_name, f"REST connection for '{e['label']}'. Enter credentials if the API needs them.", folder_id, e["url"]),
+                            "connection", conn_name, f"connection for '{e['label']}'")
+                        e["operationId"] = await create(
+                            build_rest_operation_xml(op_name, f"{e['actionType']} {e['path']} for '{e['label']}'.", folder_id, e["actionType"], e["path"]),
+                            "operation", op_name, f"operation for '{e['label']}'")
+
+                # Each Map step gets its own map, between two empty JSON profiles, ready to edit in Boomi
+                for e in iter_entries(plan):
+                    if e["kind"] != "map":
+                        continue
+                    base_name = unique_name(e["label"], "Map")
+                    profile_ids = []
+                    for side in ("Source", "Target"):
+                        prof_name = f"{base_name}_{side}_Profile"
+                        profile_ids.append(await json_profile(
+                            prof_name, f"{side} profile for the '{e['label']}' map in {safe_name}. Add its fields.",
+                            f"{side.lower()} profile for '{e['label']}'"))
+                    map_name = f"{base_name}_Map"
+                    root = await self._post_component(
+                        client, auth, url,
+                        build_map_xml(map_name, f"Map for '{e['label']}' in {safe_name}. Add the mappings.", folder_id, *profile_ids),
+                        f"map for '{e['label']}'",
+                    )
+                    e["mapId"] = root.attrib.get("componentId", "")
+                    components.append({"type": "map", "name": map_name, "id": e["mapId"]})
+
+                # Each Process Call gets its own sub-process, created first so the call can reference it
+                for e in iter_entries(plan):
+                    if e["kind"] != "processcall":
+                        continue
+                    sub_name = f"{safe_name}_{re.sub(r'[^A-Za-z0-9]+', '_', e['label']).strip('_') or 'Call'}_Subprocess"
+                    text = e.get("text") or f"Add the logic for '{e['label']}' here."
+                    sub_desc = f"Sub-process called by {safe_name} ('{e['label']}')."
+                    root = await post_process(
+                        lambda steps: build_subprocess_xml(sub_name, sub_desc, folder_id, steps, text),
+                        e["steps"], f"sub-process for '{e['label']}'",
+                    )
+                    sub_id = root.attrib.get("componentId", "")
+                    components.append({"type": "subprocess", "name": sub_name, "id": sub_id})
+                    e["processId"] = sub_id
+
+                root = await post_process(
+                    lambda entries: build_process_xml(safe_name, description, folder_id, entries),
+                    plan, "process component",
                 )
             except RuntimeError as err:
                 if components:
@@ -768,7 +904,7 @@ class BoomiService:
             "componentId": comp_id,
             "name": created,
             "folder": root.attrib.get("folderFullPath", ""),
-            "message": f"Process '{created}' created with {len(plan)} shapes and {len(components)} connector components.",
+            "message": f"Process '{created}' created with {len(plan)} shapes and {len(components)} supporting components.",
             "components": components,
         }
 

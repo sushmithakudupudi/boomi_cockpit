@@ -492,8 +492,8 @@ export const BoomiCompanionDrawer: React.FC<BoomiCompanionDrawerProps> = ({
         ))}
 
         {isTyping && (
-          <div className="flex items-center gap-2 text-slate-400 text-xs py-2">
-            <KeystoneLogo className="w-4 h-4 animate-pulse" />
+          <div className="flex items-center gap-2.5 text-slate-400 text-xs py-2">
+            <KeystoneLogo className="w-7 h-7" thinking />
             <span>Keystone AI is analyzing Atom telemetry...</span>
           </div>
         )}

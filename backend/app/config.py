@@ -32,6 +32,8 @@ class Settings:
     BOOMI_API_TOKEN: str = os.getenv("BOOMI_API_TOKEN", "")
     BOOMI_USERNAME: str = os.getenv("BOOMI_USERNAME", "")
     BOOMI_BASE_URL: str = os.getenv("BOOMI_BASE_URL", "https://api.boomi.com/api/rest/v1")
+    # Default folder for Build in Boomi; any folder in the account can be picked (or created) in ArchForge
+    BOOMI_ROOT_FOLDER_ID: str = os.getenv("BOOMI_ROOT_FOLDER_ID", "Rjo4ODQyMTg1")
     
     # AI Engine Keys
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")

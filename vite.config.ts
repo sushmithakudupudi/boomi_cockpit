@@ -6,6 +6,8 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    // Allow VS Code / Microsoft dev tunnels (https://<id>-5173.<region>.devtunnels.ms)
+    allowedHosts: ['.devtunnels.ms'],
     proxy: {
       '/api': {
         // Override to point the dev server at another backend (e.g. an isolated test instance).

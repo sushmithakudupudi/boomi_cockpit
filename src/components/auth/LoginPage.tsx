@@ -34,6 +34,34 @@ export const LoginPage: React.FC<SignInScreenProps> = ({ setupRequired, notice, 
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(initialError ?? null);
+  const [mode, setMode] = useState<'signin' | 'forgot'>('signin');
+  const [info, setInfo] = useState<string | null>(null);
+
+  const backToSignIn = (message?: string) => {
+    setMode('signin');
+    setError(null);
+    setInfo(message ?? null);
+    setPassword('');
+    setConfirm('');
+  };
+
+  const submitReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (!rules.every((r) => r.ok)) {
+      setError('Please choose a password that meets all the requirements.');
+      return;
+    }
+    setBusy(true);
+    try {
+      await authApi.resetPassword(email.trim(), password);
+      setBusy(false);
+      backToSignIn('Password updated. Sign in with your new password.');
+    } catch (err) {
+      setError((err as ApiError).message);
+      setBusy(false);
+    }
+  };
 
   const rules = [
     { ok: password.length >= 8, label: 'At least 8 characters' },
@@ -108,15 +136,24 @@ export const LoginPage: React.FC<SignInScreenProps> = ({ setupRequired, notice, 
         <div className="flex-1 flex items-center justify-center px-4 pb-10">
           <div className="w-full max-w-sm">
             <div className="mb-7">
-              <h1 className="text-2xl font-bold text-white">{setupRequired ? 'Create the admin account' : 'Sign in'}</h1>
+              <h1 className="text-2xl font-bold text-white">
+                {setupRequired ? 'Create the admin account' : mode === 'forgot' ? 'Reset your password' : 'Sign in'}
+              </h1>
               <p className="text-sm text-slate-400 mt-1.5">
                 {setupRequired
                   ? 'No accounts exist yet. This first account will be the administrator.'
-                  : 'Welcome back. Enter your work email and password.'}
+                  : mode === 'forgot'
+                    ? 'Enter your work email and choose a new password.'
+                    : 'Welcome back. Enter your work email and password.'}
               </p>
             </div>
 
-            {notice && !error && (
+            {info && !error && (
+              <div className="flex items-start gap-2 mb-4 px-3 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-200" role="status">
+                <Check className="w-4 h-4 shrink-0 mt-px" />{info}
+              </div>
+            )}
+            {notice && !error && mode === 'signin' && (
               <div className="flex items-start gap-2 mb-4 px-3 py-2.5 rounded-xl bg-sky-500/10 border border-sky-500/30 text-xs text-sky-200" role="status">
                 <Info className="w-4 h-4 shrink-0 mt-px" />{notice}
               </div>
@@ -129,6 +166,44 @@ export const LoginPage: React.FC<SignInScreenProps> = ({ setupRequired, notice, 
               )}
             </div>
 
+            {!setupRequired && mode === 'forgot' && (
+              <form onSubmit={submitReset} className="space-y-4">
+                <Field label="Email" icon={Mail}>
+                  <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username"
+                    placeholder="you@company.com" className={inputCls} disabled={busy} autoFocus maxLength={254} />
+                </Field>
+                <Field label="New password" icon={Lock}>
+                  <input type={showPassword ? 'text' : 'password'} required value={password} onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="new-password" placeholder="••••••••" className={`${inputCls} pr-10`} disabled={busy} maxLength={256} />
+                  <button type="button" onClick={() => setShowPassword((v) => !v)} aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-slate-500 hover:text-slate-200 cursor-pointer">
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </Field>
+                <Field label="Confirm new password" icon={Lock}
+                  hint={
+                    <ul className="grid gap-1 pt-1">
+                      {rules.map((r) => (
+                        <li key={r.label} className={`flex items-center gap-1.5 text-[11px] ${r.ok ? 'text-emerald-300' : 'text-slate-500'}`}>
+                          <Check className={`w-3 h-3 ${r.ok ? '' : 'opacity-30'}`} />{r.label}
+                        </li>
+                      ))}
+                    </ul>
+                  }>
+                  <input type={showPassword ? 'text' : 'password'} required value={confirm} onChange={(e) => setConfirm(e.target.value)}
+                    autoComplete="new-password" placeholder="••••••••" className={inputCls} disabled={busy} maxLength={256} />
+                </Field>
+                <button type="submit" disabled={busy}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-boomi-blue to-boomi-accent hover:from-blue-600 hover:to-sky-400 text-white text-sm font-bold shadow-lg shadow-sky-900/30 transition cursor-pointer disabled:opacity-60 disabled:cursor-wait">
+                  {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+                  {busy ? 'Updating…' : 'Update password'}
+                </button>
+                <button type="button" onClick={() => backToSignIn()}
+                  className="w-full text-xs text-slate-400 hover:text-slate-200 cursor-pointer">Back to sign in</button>
+              </form>
+            )}
+
+            {(setupRequired || mode === 'signin') && (
             <form onSubmit={submit} className="space-y-4" noValidate={false}>
               {setupRequired && (
                 <Field label="Full name" icon={User}>
@@ -164,10 +239,14 @@ export const LoginPage: React.FC<SignInScreenProps> = ({ setupRequired, notice, 
               )}
 
               {!setupRequired && (
-                <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer w-fit">
-                  <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="w-4 h-4 accent-sky-500" disabled={busy} />
-                  Keep me signed in for 30 days
-                </label>
+                <div className="flex items-center justify-between gap-2">
+                  <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer w-fit">
+                    <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="w-4 h-4 accent-sky-500" disabled={busy} />
+                    Keep me signed in for 30 days
+                  </label>
+                  <button type="button" onClick={() => { setError(null); setInfo(null); setMode('forgot'); }}
+                    className="text-xs font-semibold text-boomi-accent hover:underline cursor-pointer">Forgot password?</button>
+                </div>
               )}
 
               <button type="submit" disabled={busy}
@@ -176,9 +255,10 @@ export const LoginPage: React.FC<SignInScreenProps> = ({ setupRequired, notice, 
                 {busy ? (setupRequired ? 'Creating account…' : 'Signing in…') : (setupRequired ? 'Create account and sign in' : 'Sign in')}
               </button>
             </form>
+            )}
 
-            {!setupRequired && (
-              <p className="mt-6 text-xs text-slate-500 text-center">Need an account or forgot your password? Ask your BoomiOps administrator.</p>
+            {!setupRequired && mode === 'signin' && (
+              <p className="mt-6 text-xs text-slate-500 text-center">Need an account? Ask your BoomiOps administrator.</p>
             )}
           </div>
         </div>
